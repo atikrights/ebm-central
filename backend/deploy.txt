@@ -1,0 +1,4 @@
+# EBM Central Backend
+# Deployed to: central.ebfic.store
+# Auto-deployed via GitHub Actions
+# Last updated: 2026-04-24
