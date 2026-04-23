@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Enterprise Analytics - Members</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline-variant": "#c3c6d7",
+                        "surface-tint": "#0053db",
+                        "surface": "#f8f9ff",
+                        "primary": "#004ac6",
+                        "on-tertiary-fixed": "#2a1700",
+                        "on-secondary-fixed-variant": "#005236",
+                        "on-primary-container": "#eeefff",
+                        "tertiary-fixed": "#ffddb8",
+                        "tertiary-fixed-dim": "#ffb95f",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#e5eeff",
+                        "secondary": "#006c49",
+                        "secondary-container": "#6cf8bb",
+                        "on-error-container": "#93000a",
+                        "outline": "#737686",
+                        "tertiary": "#784b00",
+                        "error": "#ba1a1a",
+                        "surface-container-high": "#dce9ff",
+                        "on-primary": "#ffffff",
+                        "tertiary-container": "#996100",
+                        "on-primary-fixed": "#00174b",
+                        "primary-fixed": "#dbe1ff",
+                        "on-background": "#0b1c30",
+                        "error-container": "#ffdad6",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "primary-container": "#2563eb",
+                        "inverse-primary": "#b4c5ff",
+                        "surface-container-low": "#eff4ff",
+                        "on-error": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-fixed-dim": "#4edea3",
+                        "inverse-on-surface": "#eaf1ff",
+                        "surface-bright": "#f8f9ff",
+                        "on-secondary-fixed": "#002113",
+                        "on-tertiary-container": "#ffeedd",
+                        "on-surface-variant": "#434655",
+                        "inverse-surface": "#213145",
+                        "on-tertiary-fixed-variant": "#653e00",
+                        "on-surface": "#0b1c30",
+                        "secondary-fixed": "#6ffbbe",
+                        "on-tertiary": "#ffffff",
+                        "background": "#f8f9ff",
+                        "surface-variant": "#d3e4fe",
+                        "surface-container-highest": "#d3e4fe",
+                        "surface-dim": "#cbdbf5",
+                        "on-secondary-container": "#00714d",
+                        "on-primary-fixed-variant": "#003ea8"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "container-padding": "24px",
+                        "stack-md": "16px",
+                        "card-internal": "20px",
+                        "gutter-grid": "20px",
+                        "base": "4px",
+                        "stack-sm": "8px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Inter"],
+                        "display-lg": ["Manrope"],
+                        "body-md": ["Inter"],
+                        "stat-number": ["Manrope"],
+                        "label-bold": ["Inter"],
+                        "headline-md": ["Manrope"],
+                        "caption": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "display-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "stat-number": ["28px", { "lineHeight": "34px", "fontWeight": "700" }],
+                        "label-bold": ["12px", { "lineHeight": "16px", "fontWeight": "600" }],
+                        "headline-md": ["18px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "caption": ["11px", { "lineHeight": "14px", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #f8f9ff; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+</head>
+<body class="bg-background text-on-surface antialiased flex h-screen overflow-hidden">
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-screen w-64 border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-col pt-20 pb-6 px-4 space-y-1 font-manrope text-[13px] leading-tight transition-all duration-200 ease-out z-40">
+<div class="absolute top-0 left-0 w-full h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 z-50">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">analytics</span>
+</div>
+<div>
+<div class="text-lg font-black text-blue-600 dark:text-blue-400">Enterprise Suite</div>
+<div class="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Management Hub</div>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto space-y-1 pt-4">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="groups">groups</span>
+<span>HRM</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span>Projects</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+<span>Tasks</span>
+</a>
+<!-- Active State -->
+<a class="flex items-center gap-3 px-3 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-semibold rounded-md transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="person" style="font-variation-settings: 'FILL' 1;">person</span>
+<span>Members</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span>Finance</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span>Reports</span>
+</a>
+</div>
+<div class="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-1">
+<button class="w-full flex items-center justify-center gap-2 px-3 py-2 mb-4 bg-primary-container text-on-primary-container rounded-lg font-semibold hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-sm">rocket_launch</span>
+                Upgrade Plan
+            </button>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span>Help Center</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span>Logout</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 ml-64 flex flex-col h-screen overflow-hidden bg-surface">
+<!-- TopNavBar -->
+<header class="docked full-width top-0 z-50 border-b border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-950 flex items-center justify-between w-full px-6 py-2 h-16 font-manrope text-sm antialiased transition-colors">
+<div class="flex items-center gap-4 flex-1">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" placeholder="Search members..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 p-2 rounded-full transition-colors active:opacity-80 duration-150 relative">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+</button>
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 p-2 rounded-full transition-colors active:opacity-80 duration-150">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<div class="h-6 w-px bg-slate-200 mx-2"></div>
+<button class="flex items-center gap-2 px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+<span class="font-semibold text-slate-700">Select Company</span>
+<span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-slate-200 object-cover" data-alt="professional headshot of a businessman smiling gently in soft lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfPi7M0mqmpP2BotihmvyrfD1NldZRezrE9_DTNem1T9P_wqR4ZBC15pCoro3LlKmdG3F559C77C1lWTWonvTYB4Yv3zxW6BVrKe45YSqEiMuF934sTPZ9teDkEQ0YrwFoPH50ys4Jb9Fltq41myhKw5L6Zc3io-glEkBPyZBVuIcVUj-GOgpOpiE8lNvuWsobXTtLCpeB8G-DVEA9uelvucuFHqSZereG-8-ble-JCE8p-GoUBt7pKEhRXRpmxljxwFN86MVGm34"/>
+</div>
+</header>
+<!-- Dashboard Canvas -->
+<main class="flex-1 overflow-y-auto p-container-padding">
+<div class="flex items-center justify-between mb-6">
+<div>
+<h1 class="font-headline-md text-headline-md text-on-surface">Members Dashboard</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Overview of membership statistics and growth.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 bg-white border border-outline-variant rounded-lg font-label-bold text-label-bold text-on-surface hover:bg-surface-variant transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                        Export
+                    </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-primary-container text-on-primary-container rounded-lg font-label-bold text-label-bold hover:opacity-90 transition-opacity shadow-sm">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                        Add Member
+                    </button>
+</div>
+</div>
+<!-- 3-Section Grid Layout -->
+<div class="grid grid-cols-12 gap-gutter-grid h-[calc(100vh-180px)] min-h-[600px]">
+<!-- Left Section: Member Stats (3 cols) -->
+<div class="col-span-3 flex flex-col gap-gutter-grid">
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-sm flex-1 flex flex-col justify-center">
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">groups</span>
+</div>
+<h3 class="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">Total Members</h3>
+</div>
+<div class="font-stat-number text-stat-number text-on-surface">12,450</div>
+<div class="flex items-center gap-1 mt-2 font-caption text-caption text-secondary">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span>+12% vs last month</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-sm flex-1 flex flex-col justify-center">
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">how_to_reg</span>
+</div>
+<h3 class="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">Active Now</h3>
+</div>
+<div class="font-stat-number text-stat-number text-on-surface">3,892</div>
+<div class="flex items-center gap-1 mt-2 font-caption text-caption text-on-surface-variant">
+<span>Currently online</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-sm flex-1 flex flex-col justify-center">
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded-full bg-error-container flex items-center justify-center text-error">
+<span class="material-symbols-outlined">person_remove</span>
+</div>
+<h3 class="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">Churn Rate</h3>
+</div>
+<div class="font-stat-number text-stat-number text-on-surface">2.4%</div>
+<div class="flex items-center gap-1 mt-2 font-caption text-caption text-error">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span>+0.5% vs last month</span>
+</div>
+</div>
+</div>
+<!-- Middle Section: Membership Growth (5 cols) -->
+<div class="col-span-5 bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-sm flex flex-col">
+<div class="flex justify-between items-center mb-6">
+<h2 class="font-headline-md text-headline-md text-on-surface">Membership Growth</h2>
+<select class="bg-surface-container border-none text-body-sm font-body-sm rounded-md py-1 pl-3 pr-8 focus:ring-0 cursor-pointer">
+<option>Last 6 Months</option>
+<option>This Year</option>
+</select>
+</div>
+<div class="flex-1 relative w-full h-full min-h-[300px]">
+<!-- Decorative chart lines for UI mockup -->
+<div class="absolute inset-0 flex flex-col justify-between py-4">
+<div class="w-full border-t border-outline-variant opacity-30"></div>
+<div class="w-full border-t border-outline-variant opacity-30"></div>
+<div class="w-full border-t border-outline-variant opacity-30"></div>
+<div class="w-full border-t border-outline-variant opacity-30"></div>
+<div class="w-full border-t border-outline-variant opacity-30"></div>
+</div>
+<!-- Mockup Line Chart -->
+<div class="absolute inset-0 pt-4 flex items-end px-2">
+<svg class="w-full h-full preserve-3d" preserveaspectratio="none" viewbox="0 0 400 200">
+<defs>
+<lineargradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#2563eb" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#2563eb" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,180 L50,150 L100,160 L150,110 L200,120 L250,70 L300,80 L350,30 L400,40 L400,200 L0,200 Z" fill="url(#chartGradient)"></path>
+<path d="M0,180 L50,150 L100,160 L150,110 L200,120 L250,70 L300,80 L350,30 L400,40" fill="none" stroke="#2563eb" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></path>
+<!-- Data points -->
+<circle cx="350" cy="30" fill="#ffffff" r="4" stroke="#2563eb" stroke-width="2"></circle>
+<circle cx="400" cy="40" fill="#ffffff" r="4" stroke="#2563eb" stroke-width="2"></circle>
+</svg>
+</div>
+<!-- X Axis Labels -->
+<div class="absolute bottom-[-24px] left-0 w-full flex justify-between px-2 font-caption text-caption text-on-surface-variant">
+<span>Jan</span>
+<span>Feb</span>
+<span>Mar</span>
+<span>Apr</span>
+<span>May</span>
+<span>Jun</span>
+</div>
+</div>
+</div>
+<!-- Right Section: Distribution & Joiners (4 cols) -->
+<div class="col-span-4 flex flex-col gap-gutter-grid">
+<!-- Distribution Chart (Bento Grid Style) -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-sm flex-1 flex flex-col">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-4">Member Distribution</h2>
+<div class="flex-1 flex items-center justify-center relative">
+<!-- Mock Donut Chart -->
+<div class="w-32 h-32 rounded-full border-[12px] border-surface-container relative">
+<div class="absolute inset-[-12px] rounded-full border-[12px] border-primary" style="clip-path: polygon(50% 50%, 100% 0, 100% 100%, 0 100%, 0 0, 30% 0);"></div>
+<div class="absolute inset-[-12px] rounded-full border-[12px] border-secondary" style="clip-path: polygon(50% 50%, 30% 0, 0 0, 0 50%);"></div>
+<div class="absolute inset-0 flex items-center justify-center flex-col">
+<span class="font-stat-number text-[20px] leading-tight text-on-surface">12k</span>
+<span class="font-caption text-caption text-on-surface-variant">Total</span>
+</div>
+</div>
+</div>
+<div class="mt-4 space-y-2">
+<div class="flex items-center justify-between font-body-sm text-body-sm">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-primary"></div>
+<span class="text-on-surface">Enterprise</span>
+</div>
+<span class="font-medium">65%</span>
+</div>
+<div class="flex items-center justify-between font-body-sm text-body-sm">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-secondary"></div>
+<span class="text-on-surface">Professional</span>
+</div>
+<span class="font-medium">25%</span>
+</div>
+<div class="flex items-center justify-between font-body-sm text-body-sm">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-surface-container-high"></div>
+<span class="text-on-surface">Starter</span>
+</div>
+<span class="font-medium">10%</span>
+</div>
+</div>
+</div>
+<!-- Recent Joiners List -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-sm flex-1 flex flex-col">
+<div class="flex justify-between items-center mb-4">
+<h2 class="font-headline-md text-headline-md text-on-surface">Recent Joiners</h2>
+<button class="font-label-bold text-label-bold text-primary hover:underline">View All</button>
+</div>
+<div class="flex-1 overflow-y-auto space-y-3">
+<div class="flex items-center gap-3 p-2 hover:bg-surface rounded-lg transition-colors cursor-pointer border border-transparent hover:border-surface-container">
+<img alt="Sarah Jenkins" class="w-10 h-10 rounded-full object-cover" data-alt="professional portrait of a young woman with a warm smile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDU7-tcsVcofSGyNzJo3CgP8Zj9H42hS4nlqb5jECKEXZL1R09wqOOLA0zTBjU2l9g0y4e_pHbyLmTHKciNnVGQiYhjSydLnwaN-yxdSgK1u2uMeRMbozhrQXpS3WTyUZYVmFcEx-FqBA3IUSycergEQlFpENym6DZ770rDr6KFszdYs6eUNLqE16RtjZzJLP8Y3t_bLJDQv8V_FmZHZ7xMBpP2AjQP27AiJQoh_askNAw1SMA1AWIDdirlV2XAGvHxjbwgQDt1JPs"/>
+<div class="flex-1">
+<div class="font-label-bold text-label-bold text-on-surface">Sarah Jenkins</div>
+<div class="font-caption text-caption text-on-surface-variant">TechFlow Inc.</div>
+</div>
+<span class="px-2 py-1 bg-surface-container text-primary font-caption text-[10px] rounded uppercase tracking-wider">Enterprise</span>
+</div>
+<div class="flex items-center gap-3 p-2 hover:bg-surface rounded-lg transition-colors cursor-pointer border border-transparent hover:border-surface-container">
+<img alt="Michael Chen" class="w-10 h-10 rounded-full object-cover" data-alt="headshot of an asian businessman wearing glasses looking confident" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAUvRWGqz_Bf2ev8JPoh9eCiJblWN6PsSOc9Uotgb0nIjCOZfggZmiXBJpM_DOgzESTG3WFMul430OAvsHXiwa7Om-vdax39ZofquR7pCFmKI6JnN5jlBvvVuHThlfT-qisZ2qttVOP-kWUrYKJrMqr8f8CfQ9I_9IF5NHzgRualTumg5iv04dO2P5N4L8kRTijOoFg1ZI6O2qBi8JvL7sbBdCkQGM-CFNCii5HSQt916Joa0bkVh4UT_gOCTNECPQdah3YXCKCfcw"/>
+<div class="flex-1">
+<div class="font-label-bold text-label-bold text-on-surface">Michael Chen</div>
+<div class="font-caption text-caption text-on-surface-variant">Global Logistics</div>
+</div>
+<span class="px-2 py-1 bg-surface-container text-primary font-caption text-[10px] rounded uppercase tracking-wider">Enterprise</span>
+</div>
+<div class="flex items-center gap-3 p-2 hover:bg-surface rounded-lg transition-colors cursor-pointer border border-transparent hover:border-surface-container">
+<div class="w-10 h-10 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center font-label-bold">AJ</div>
+<div class="flex-1">
+<div class="font-label-bold text-label-bold text-on-surface">Alice Johnson</div>
+<div class="font-caption text-caption text-on-surface-variant">Creative Studios</div>
+</div>
+<span class="px-2 py-1 bg-surface-container-high text-on-surface-variant font-caption text-[10px] rounded uppercase tracking-wider">Professional</span>
+</div>
+<div class="flex items-center gap-3 p-2 hover:bg-surface rounded-lg transition-colors cursor-pointer border border-transparent hover:border-surface-container">
+<img alt="David Miller" class="w-10 h-10 rounded-full object-cover" data-alt="portrait of a middle aged man with short hair and a slight smile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuClDtIrQusJdhzbPRkgMIFaLhjallGaddIkpQrsypB5CyTjweCTcOFou-nWKQ5tTIp7FnBU-DcKt89fQOhSNyTKYLm01yHIxRZlGdBnMzfK4SRtBX6QuYFIyeHbOxDEZ7qyQNXWZKfVqVoq7f7_LObmYjlpE1sTi2mM8dfq_jImMXVQa8KiB7y8mwyahSuWyjaqYrNuzvBj01yUMfbVlMdRaOu_ZLvTghebTKBeNxPb5Qe-zyuvviPSd8RAgETePmj_t4gn_eaSTF0"/>
+<div class="flex-1">
+<div class="font-label-bold text-label-bold text-on-surface">David Miller</div>
+<div class="font-caption text-caption text-on-surface-variant">Nexus Corp</div>
+</div>
+<span class="px-2 py-1 bg-surface-container text-primary font-caption text-[10px] rounded uppercase tracking-wider">Enterprise</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Enterprise Analytics - Projects Dashboard</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Config -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline-variant": "#c3c6d7",
+                        "surface-tint": "#0053db",
+                        "surface": "#f8f9ff",
+                        "primary": "#004ac6",
+                        "on-tertiary-fixed": "#2a1700",
+                        "on-secondary-fixed-variant": "#005236",
+                        "on-primary-container": "#eeefff",
+                        "tertiary-fixed": "#ffddb8",
+                        "tertiary-fixed-dim": "#ffb95f",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#e5eeff",
+                        "secondary": "#006c49",
+                        "secondary-container": "#6cf8bb",
+                        "on-error-container": "#93000a",
+                        "outline": "#737686",
+                        "tertiary": "#784b00",
+                        "error": "#ba1a1a",
+                        "surface-container-high": "#dce9ff",
+                        "on-primary": "#ffffff",
+                        "tertiary-container": "#996100",
+                        "on-primary-fixed": "#00174b",
+                        "primary-fixed": "#dbe1ff",
+                        "on-background": "#0b1c30",
+                        "error-container": "#ffdad6",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "primary-container": "#2563eb",
+                        "inverse-primary": "#b4c5ff",
+                        "surface-container-low": "#eff4ff",
+                        "on-error": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-fixed-dim": "#4edea3",
+                        "inverse-on-surface": "#eaf1ff",
+                        "surface-bright": "#f8f9ff",
+                        "on-secondary-fixed": "#002113",
+                        "on-tertiary-container": "#ffeedd",
+                        "on-surface-variant": "#434655",
+                        "inverse-surface": "#213145",
+                        "on-tertiary-fixed-variant": "#653e00",
+                        "on-surface": "#0b1c30",
+                        "secondary-fixed": "#6ffbbe",
+                        "on-tertiary": "#ffffff",
+                        "background": "#f8f9ff",
+                        "surface-variant": "#d3e4fe",
+                        "surface-container-highest": "#d3e4fe",
+                        "surface-dim": "#cbdbf5",
+                        "on-secondary-container": "#00714d",
+                        "on-primary-fixed-variant": "#003ea8"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "container-padding": "24px",
+                        "stack-md": "16px",
+                        "card-internal": "20px",
+                        "gutter-grid": "20px",
+                        "base": "4px",
+                        "stack-sm": "8px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Inter"],
+                        "display-lg": ["Manrope"],
+                        "body-md": ["Inter"],
+                        "stat-number": ["Manrope"],
+                        "label-bold": ["Inter"],
+                        "headline-md": ["Manrope"],
+                        "caption": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                        "display-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "stat-number": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                        "label-bold": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                        "headline-md": ["18px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "caption": ["11px", {"lineHeight": "14px", "fontWeight": "500"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-surface text-on-surface antialiased flex h-screen overflow-hidden">
+<!-- SideNavBar (Shared Component) -->
+<nav class="fixed left-0 top-0 h-screen w-64 border-r border-outline-variant bg-surface-container-lowest flex flex-col pt-20 pb-6 px-4 space-y-1 z-40 transition-all duration-200 ease-out flex-shrink-0">
+<!-- Injected fixed top-0 w-64 border-r logic -->
+<!-- Tab 1: Overview -->
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-body-md text-body-md">Overview</span>
+</a>
+<!-- Tab 2: HRM -->
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined" data-icon="groups">groups</span>
+<span class="font-body-md text-body-md">HRM</span>
+</a>
+<!-- Tab 3: Projects (Active) -->
+<a class="flex items-center gap-3 px-3 py-2 bg-primary-container/10 text-primary-fixed-variant font-semibold rounded-md border border-primary-container/20" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span class="font-body-md text-body-md text-primary">Projects</span>
+</a>
+<!-- Tab 4: Tasks -->
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+<span class="font-body-md text-body-md">Tasks</span>
+</a>
+<!-- Tab 5: Members -->
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-body-md text-body-md">Members</span>
+</a>
+<!-- Tab 6: Finance -->
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-body-md text-body-md">Finance</span>
+</a>
+<!-- Tab 7: Reports -->
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-body-md text-body-md">Reports</span>
+</a>
+<div class="mt-auto pt-4 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-body-md text-body-md">Help Center</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors rounded-md" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-body-md text-body-md">Logout</span>
+</a>
+<div class="px-3 pt-4">
+<button class="w-full bg-primary text-on-primary py-2 rounded-lg font-label-bold text-label-bold hover:bg-primary/90 transition-colors">
+                    Upgrade Plan
+                </button>
+</div>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex-1 flex flex-col ml-64 bg-surface h-full">
+<!-- TopNavBar (Shared Component) -->
+<header class="flex items-center justify-between w-full px-6 py-2 h-16 bg-surface-container-lowest border-b border-outline-variant shadow-sm z-50 flex-shrink-0">
+<div class="flex items-center gap-4">
+<div class="text-xl font-bold tracking-tight text-on-surface font-display-lg">
+                    Enterprise Analytics
+                </div>
+</div>
+<!-- Search Bar on Left (relative to right cluster) -->
+<div class="flex-1 flex justify-start ml-8 max-w-md hidden md:flex">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">search</span>
+<input class="w-full pl-9 pr-4 py-1.5 bg-surface-container-low border border-outline-variant rounded-full font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all" placeholder="Search everywhere..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-2 px-3 py-1.5 border border-outline-variant rounded-full text-on-surface font-label-bold text-label-bold hover:bg-surface-container transition-colors">
+<span>Select Company</span>
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+<div class="flex items-center gap-1 border-l border-outline-variant pl-3 ml-1">
+<button class="p-1.5 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full border border-surface-container-lowest"></span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+<div class="ml-2 w-8 h-8 rounded-full bg-primary-container overflow-hidden border border-outline-variant shrink-0">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="close up professional headshot of man in blue shirt looking directly at camera with neutral expression on light background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCHPoARI7wEm8rfMm0VZF1EO89ua97g3nlEDOeSnUpHFj32c8UlWaeX9bPyuv1aDu8qG-S6MyvC7CMBSDrtgz9Wizf_RilxLtSK9iIPguhSGaxrxbtfsjnAkknB_SHm9nQpLB4Fcr_gu46xVAoZQzGDJSGAaqnakBsPgWven7xxafnJF6bQkQKxbcIgH4mjnzMVJSLJAXTOBDwrSDxYlwlDdhon_3N-9iTnmoFaI_A515HUu3JKvRZVDEwepJu6YThdaZbpYYOkjvs"/>
+</div>
+</div>
+</header>
+<!-- Dashboard Canvas -->
+<main class="flex-1 overflow-y-auto p-container-padding">
+<div class="flex items-center justify-between mb-6">
+<div>
+<h1 class="font-display-lg text-display-lg text-on-surface mb-1">Projects Dashboard</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Real-time overview of active engagements and resource health.</p>
+</div>
+<div class="flex gap-2">
+<button class="flex items-center gap-2 px-4 py-2 border border-outline-variant bg-surface-container-lowest rounded-lg font-label-bold text-label-bold text-on-surface hover:bg-surface-container transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+<span>This Quarter</span>
+</button>
+<button class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-bold text-label-bold hover:bg-primary/90 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>New Project</span>
+</button>
+</div>
+</div>
+<!-- 3-Section Grid Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter-grid h-[calc(100vh-180px)] min-h-[600px]">
+<!-- LEFT SECTION: Stats (3 cols) -->
+<div class="lg:col-span-3 flex flex-col gap-4">
+<!-- Stat Card 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-card-internal shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex flex-col justify-between flex-1">
+<div class="flex items-center gap-3 mb-2">
+<div class="w-10 h-10 rounded-full bg-primary-fixed/30 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">folder_open</span>
+</div>
+<span class="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">Active Projects</span>
+</div>
+<div>
+<div class="font-stat-number text-stat-number text-on-surface mb-1">42</div>
+<div class="flex items-center gap-1 text-secondary">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span class="font-caption text-caption">+12% vs last month</span>
+</div>
+</div>
+</div>
+<!-- Stat Card 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-card-internal shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex flex-col justify-between flex-1">
+<div class="flex items-center gap-3 mb-2">
+<div class="w-10 h-10 rounded-full bg-secondary-container/30 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">check_circle</span>
+</div>
+<span class="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">Avg. Completion</span>
+</div>
+<div>
+<div class="font-stat-number text-stat-number text-on-surface mb-1">68%</div>
+<!-- Mini Progress Bar -->
+<div class="w-full h-1.5 bg-surface-variant rounded-full mt-2 mb-1 overflow-hidden">
+<div class="h-full bg-secondary w-[68%] rounded-full"></div>
+</div>
+<div class="font-caption text-caption text-on-surface-variant mt-1 text-right">Across all portfolios</div>
+</div>
+</div>
+<!-- Stat Card 3 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-card-internal shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex flex-col justify-between flex-1">
+<div class="flex items-center gap-3 mb-2">
+<div class="w-10 h-10 rounded-full bg-tertiary-container/20 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined">timer</span>
+</div>
+<span class="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">On-Time %</span>
+</div>
+<div>
+<div class="font-stat-number text-stat-number text-on-surface mb-1">94%</div>
+<div class="flex items-center gap-1 text-error">
+<span class="material-symbols-outlined text-[14px]">trending_down</span>
+<span class="font-caption text-caption">-2% vs last month</span>
+</div>
+</div>
+</div>
+</div>
+<!-- MIDDLE SECTION: Velocity Chart (5 cols) -->
+<div class="lg:col-span-5 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-card-internal flex flex-col relative overflow-hidden">
+<div class="flex justify-between items-start mb-6 z-10">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Project Velocity</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Task completion rate over time</p>
+</div>
+<button class="p-1 text-on-surface-variant hover:bg-surface-container rounded-md">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- CSS-Based Area Chart Mockup -->
+<div class="flex-1 w-full relative mt-4 flex flex-col justify-end min-h-[300px]">
+<!-- Y-Axis Grid Lines -->
+<div class="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8">
+<div class="w-full border-t border-outline-variant/30 border-dashed h-0 relative"><span class="absolute -top-3 -left-2 text-[10px] text-outline">100</span></div>
+<div class="w-full border-t border-outline-variant/30 border-dashed h-0 relative"><span class="absolute -top-3 -left-2 text-[10px] text-outline">75</span></div>
+<div class="w-full border-t border-outline-variant/30 border-dashed h-0 relative"><span class="absolute -top-3 -left-2 text-[10px] text-outline">50</span></div>
+<div class="w-full border-t border-outline-variant/30 border-dashed h-0 relative"><span class="absolute -top-3 -left-2 text-[10px] text-outline">25</span></div>
+<div class="w-full border-t border-outline-variant border-solid h-0 relative"><span class="absolute -top-3 -left-2 text-[10px] text-outline">0</span></div>
+</div>
+<!-- Gradient Area SVG -->
+<svg class="w-full h-full absolute bottom-8 left-4 right-0" preserveaspectratio="none" viewbox="0 0 100 100">
+<defs>
+<lineargradient id="primary-gradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#2563eb" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#2563eb" stop-opacity="0.0"></stop>
+</lineargradient>
+</defs>
+<!-- Path for area -->
+<path d="M0,100 L0,70 Q10,50 20,60 T40,40 T60,30 T80,10 T100,20 L100,100 Z" fill="url(#primary-gradient)"></path>
+<!-- Stroke line -->
+<path d="M0,70 Q10,50 20,60 T40,40 T60,30 T80,10 T100,20" fill="none" stroke="#2563eb" stroke-width="2"></path>
+<!-- Data Points -->
+<circle cx="20" cy="60" fill="#fff" r="2" stroke="#2563eb" stroke-width="1.5"></circle>
+<circle cx="40" cy="40" fill="#fff" r="2" stroke="#2563eb" stroke-width="1.5"></circle>
+<circle cx="60" cy="30" fill="#fff" r="2" stroke="#2563eb" stroke-width="1.5"></circle>
+<circle cx="80" cy="10" fill="#fff" r="2" stroke="#2563eb" stroke-width="1.5"></circle>
+</svg>
+<!-- X-Axis Labels -->
+<div class="h-8 flex justify-between items-end px-4 text-[11px] font-caption text-outline w-full pl-6">
+<span>Wk 1</span>
+<span>Wk 2</span>
+<span>Wk 3</span>
+<span>Wk 4</span>
+<span>Wk 5</span>
+</div>
+</div>
+</div>
+<!-- RIGHT SECTION: Donut & Table (4 cols) -->
+<div class="lg:col-span-4 flex flex-col gap-4">
+<!-- Resource Allocation Donut -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-card-internal shadow-[0_1px_3px_rgba(0,0,0,0.05)] h-1/2 min-h-[220px] flex flex-col">
+<div class="flex justify-between items-center mb-2">
+<h3 class="font-label-bold text-label-bold text-on-surface uppercase tracking-wider">Resource Allocation</h3>
+<button class="text-primary font-label-bold text-label-bold hover:underline">Details</button>
+</div>
+<div class="flex-1 flex items-center justify-center gap-6">
+<!-- CSS Donut Chart -->
+<div class="relative w-28 h-28 rounded-full border-[12px] border-surface-variant flex items-center justify-center" style="border-top-color: #2563eb; border-right-color: #006c49; border-bottom-color: #784b00; transform: rotate(45deg);">
+<div class="absolute inset-0 rounded-full border-[12px] border-transparent" style="border-left-color: #2563eb; transform: rotate(45deg);"></div>
+<div class="w-full h-full rounded-full bg-surface-container-lowest" style="transform: rotate(-45deg);">
+<div class="flex flex-col items-center justify-center h-full">
+<span class="font-stat-number text-[20px] leading-tight text-on-surface">100%</span>
+<span class="font-caption text-[9px] text-on-surface-variant">Allocated</span>
+</div>
+</div>
+</div>
+<!-- Legend -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-sm bg-primary-container"></div>
+<span class="font-body-sm text-[12px] text-on-surface">Engineering (45%)</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-sm bg-secondary"></div>
+<span class="font-body-sm text-[12px] text-on-surface">Design (30%)</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-sm bg-tertiary"></div>
+<span class="font-body-sm text-[12px] text-on-surface">Marketing (25%)</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Active Project Roster -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] h-1/2 flex flex-col overflow-hidden">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-bright">
+<h3 class="font-label-bold text-label-bold text-on-surface uppercase tracking-wider">Active Roster</h3>
+<button class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined text-[16px]">filter_list</span></button>
+</div>
+<div class="flex-1 overflow-y-auto">
+<table class="w-full text-left border-collapse">
+<tbody>
+<tr class="border-b border-outline-variant/50 hover:bg-surface-container-low transition-colors group">
+<td class="py-3 px-4">
+<div class="font-body-sm font-medium text-on-surface">Alpha Migration</div>
+<div class="font-caption text-caption text-on-surface-variant">Acme Corp</div>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary-container/30 text-on-secondary-fixed-variant font-caption text-caption border border-secondary-container">On Track</span>
+</td>
+</tr>
+<tr class="border-b border-outline-variant/50 hover:bg-surface-container-low transition-colors group">
+<td class="py-3 px-4">
+<div class="font-body-sm font-medium text-on-surface">Q3 Marketing Site</div>
+<div class="font-caption text-caption text-on-surface-variant">Global Tech</div>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-tertiary-container/20 text-tertiary font-caption text-caption border border-tertiary-fixed-dim">At Risk</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="py-3 px-4">
+<div class="font-body-sm font-medium text-on-surface">Data Pipeline Revamp</div>
+<div class="font-caption text-caption text-on-surface-variant">Internal</div>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary-container/30 text-on-secondary-fixed-variant font-caption text-caption border border-secondary-container">On Track</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

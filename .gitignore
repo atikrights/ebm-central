@@ -1,0 +1,18 @@
+# Node / Backend
+backend/node_modules/
+backend/vendor/
+backend/.env
+backend/storage/*.key
+
+# Flutter / Frontend
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/build/
+frontend/.idea/
+frontend/*.iml
+frontend/.vscode/
+
+# OS specific
+.DS_Store
+Thumbs.db

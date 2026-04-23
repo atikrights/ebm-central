@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Finance Dashboard - Enterprise Analytics</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "outline-variant": "#c3c6d7",
+                      "surface-tint": "#0053db",
+                      "surface": "#f8f9ff",
+                      "primary": "#004ac6",
+                      "on-tertiary-fixed": "#2a1700",
+                      "on-secondary-fixed-variant": "#005236",
+                      "on-primary-container": "#eeefff",
+                      "tertiary-fixed": "#ffddb8",
+                      "tertiary-fixed-dim": "#ffb95f",
+                      "on-secondary": "#ffffff",
+                      "surface-container": "#e5eeff",
+                      "secondary": "#006c49",
+                      "secondary-container": "#6cf8bb",
+                      "on-error-container": "#93000a",
+                      "outline": "#737686",
+                      "tertiary": "#784b00",
+                      "error": "#ba1a1a",
+                      "surface-container-high": "#dce9ff",
+                      "on-primary": "#ffffff",
+                      "tertiary-container": "#996100",
+                      "on-primary-fixed": "#00174b",
+                      "primary-fixed": "#dbe1ff",
+                      "on-background": "#0b1c30",
+                      "error-container": "#ffdad6",
+                      "primary-fixed-dim": "#b4c5ff",
+                      "primary-container": "#2563eb",
+                      "inverse-primary": "#b4c5ff",
+                      "surface-container-low": "#eff4ff",
+                      "on-error": "#ffffff",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary-fixed-dim": "#4edea3",
+                      "inverse-on-surface": "#eaf1ff",
+                      "surface-bright": "#f8f9ff",
+                      "on-secondary-fixed": "#002113",
+                      "on-tertiary-container": "#ffeedd",
+                      "on-surface-variant": "#434655",
+                      "inverse-surface": "#213145",
+                      "on-tertiary-fixed-variant": "#653e00",
+                      "on-surface": "#0b1c30",
+                      "secondary-fixed": "#6ffbbe",
+                      "on-tertiary": "#ffffff",
+                      "background": "#f8f9ff",
+                      "surface-variant": "#d3e4fe",
+                      "surface-container-highest": "#d3e4fe",
+                      "surface-dim": "#cbdbf5",
+                      "on-secondary-container": "#00714d",
+                      "on-primary-fixed-variant": "#003ea8"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "container-padding": "24px",
+                      "stack-md": "16px",
+                      "card-internal": "20px",
+                      "gutter-grid": "20px",
+                      "base": "4px",
+                      "stack-sm": "8px"
+              },
+              "fontFamily": {
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "display-lg": [
+                              "Manrope"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "stat-number": [
+                              "Manrope"
+                      ],
+                      "label-bold": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Manrope"
+                      ],
+                      "caption": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "body-sm": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "display-lg": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "stat-number": [
+                              "28px",
+                              {
+                                      "lineHeight": "34px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "label-bold": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-md": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "caption": [
+                              "11px",
+                              {
+                                      "lineHeight": "14px",
+                                      "fontWeight": "500"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+</head>
+<body class="bg-background text-on-background font-body-md h-screen flex overflow-hidden">
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-screen w-64 border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-col pt-20 pb-6 px-4 space-y-1 hidden md:flex transition-all duration-200 ease-out z-40">
+<div class="absolute top-0 left-0 w-full h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+<div class="flex items-center gap-3">
+<img alt="Organization Logo" class="w-8 h-8 rounded-lg object-cover" data-alt="Abstract geometric corporate logo mark in blue and white colors" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDUfjSTm7CB-GOVoKZIj_QLviFCkqnR57EwFy9fBohii7ORIcZ5froR_wvCNcPGh3-3K6MKmH11ilPGeZnZakrk3occZxVjp8FG1l7cWkB2YoSBZxbZ8KMVF6PcWOt7UcrwoOhNPMmOqoby16DZxd6Lg0YW5xSXY3UtFui2_z-3IpF0JCRSq9WUXfsO260_6p96axsv3vhpXuZ32nUE2-UF24qvLZXlvVKpXRATbaodXlu5eQ-Me1znvCsk38UwvFRApDmO8FHHvFA"/>
+<div>
+<h1 class="font-display-lg text-lg text-blue-600 dark:text-blue-400 font-black tracking-tight leading-none">Enterprise Suite</h1>
+<p class="font-caption text-caption text-slate-500">Management Hub</p>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto space-y-1 pt-4">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md font-body-sm text-[13px] leading-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="dashboard">dashboard</span>
+                Overview
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md font-body-sm text-[13px] leading-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="groups">groups</span>
+                HRM
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md font-body-sm text-[13px] leading-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="inventory_2">inventory_2</span>
+                Projects
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md font-body-sm text-[13px] leading-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="assignment">assignment</span>
+                Tasks
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md font-body-sm text-[13px] leading-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="person">person</span>
+                Members
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-semibold rounded-md font-body-sm text-[13px] leading-tight transition-all duration-200 ease-out" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="payments" data-weight="fill" style="font-variation-settings: 'FILL' 1;">payments</span>
+                Finance
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md font-body-sm text-[13px] leading-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="analytics">analytics</span>
+                Reports
+            </a>
+</div>
+<div class="mt-auto space-y-1">
+<button class="w-full flex justify-center items-center py-2 px-4 bg-primary text-on-primary rounded-lg font-label-bold text-label-bold mb-4 hover:opacity-90 transition-opacity">
+                Upgrade Plan
+            </button>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md font-body-sm text-[13px] leading-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="help">help</span>
+                Help Center
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-md font-body-sm text-[13px] leading-tight" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="logout">logout</span>
+                Logout
+            </a>
+</div>
+</nav>
+<div class="flex-1 flex flex-col md:ml-64 relative min-w-0">
+<!-- TopNavBar -->
+<header class="docked full-width top-0 z-50 border-b border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-950 font-manrope text-sm antialiased flex items-center justify-between w-full px-6 py-2 h-16">
+<div class="flex items-center gap-4">
+<h2 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white hidden sm:block">Enterprise Analytics</h2>
+<div class="relative hidden md:block w-64 ml-4">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
+<input class="w-full pl-9 pr-4 py-1.5 bg-slate-100 dark:bg-slate-900 border-none rounded-full text-body-sm focus:ring-2 focus:ring-primary/50 text-slate-700 dark:text-slate-300 placeholder-slate-400 outline-none" placeholder="Search..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="px-4 py-1.5 text-blue-600 dark:text-blue-400 font-semibold text-body-sm border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors hidden sm:block">
+                    Select Company
+                </button>
+<div class="flex items-center gap-2">
+<button class="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors rounded-full active:opacity-80 duration-150">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors rounded-full active:opacity-80 duration-150">
+<span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+</button>
+<button class="ml-2 w-8 h-8 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-primary/50">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="Professional headshot of a man in a corporate setting with a blue shirt" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQQfD5IUS_G9wxf5iqTNT3eVLZ5LwigOYkN0APx2lKn3kXvqiRdZZOzPEbUz1MSZwb8VzDhcbPF0yj7kRQonDjnU4CHKBGHsv0CFwoX6M63Viv0oDXGY1UZQLCmg50OC7vj1CgMd0y1szfIz1VQEsriylF4TXTjo1v485_Pa7vxW91QgAyWCu8MJF-W4qPLPGSzOSXZ52DCpMPnUrYFKLgXUGKEicQB70yCX8FQ16TpX0ft-QUZx-UL58xbIOj8HWxKg3MxEZAoBU"/>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto p-container-padding bg-background w-full">
+<div class="mb-6 flex justify-between items-end">
+<div>
+<h1 class="font-display-lg text-display-lg text-on-surface">Finance Dashboard</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Acme Corp Consolidated Financials Q3</p>
+</div>
+<div class="flex gap-2">
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container text-on-surface rounded-lg border border-outline-variant font-label-bold text-label-bold hover:bg-surface-variant transition-colors shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+<span class="material-symbols-outlined text-[16px]">calendar_today</span>
+                        This Quarter
+                    </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-bold text-label-bold hover:opacity-90 transition-opacity shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+<span class="material-symbols-outlined text-[16px]">download</span>
+                        Export
+                    </button>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-gutter-grid max-w-[1600px] mx-auto">
+<!-- Section 1: KPIs (Left Column - 3 cols) -->
+<div class="col-span-12 lg:col-span-3 flex flex-col gap-stack-md">
+<!-- Total Income -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex flex-col h-full justify-between">
+<div class="flex items-start justify-between mb-4">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-[20px]" data-weight="fill" style="font-variation-settings: 'FILL' 1;">trending_up</span>
+</div>
+<span class="px-2 py-1 bg-secondary-container text-on-secondary-container rounded text-[10px] font-bold">+12.5%</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-1">Total Income</p>
+<p class="font-stat-number text-stat-number text-on-surface">$2.4M</p>
+</div>
+</div>
+<!-- Total Expenses -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex flex-col h-full justify-between">
+<div class="flex items-start justify-between mb-4">
+<div class="w-10 h-10 rounded-full bg-error-container flex items-center justify-center">
+<span class="material-symbols-outlined text-error text-[20px]" data-weight="fill" style="font-variation-settings: 'FILL' 1;">trending_down</span>
+</div>
+<span class="px-2 py-1 bg-surface-variant text-on-surface-variant rounded text-[10px] font-bold">-4.2%</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-1">Total Expenses</p>
+<p class="font-stat-number text-stat-number text-on-surface">$1.1M</p>
+</div>
+</div>
+<!-- Net Profit -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex flex-col h-full justify-between relative overflow-hidden">
+<div class="absolute right-0 top-0 w-24 h-24 bg-primary/5 rounded-bl-full -mr-4 -mt-4"></div>
+<div class="flex items-start justify-between mb-4 relative z-10">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed flex items-center justify-center">
+<span class="material-symbols-outlined text-on-secondary-fixed-variant text-[20px]" data-weight="fill" style="font-variation-settings: 'FILL' 1;">account_balance_wallet</span>
+</div>
+<span class="px-2 py-1 bg-secondary-container text-on-secondary-container rounded text-[10px] font-bold">+18.3%</span>
+</div>
+<div class="relative z-10">
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-1">Net Profit</p>
+<p class="font-stat-number text-stat-number text-on-surface">$1.3M</p>
+</div>
+</div>
+</div>
+<!-- Section 2: Middle Section (6 cols) -->
+<div class="col-span-12 lg:col-span-5 flex flex-col gap-stack-md">
+<!-- Cash Flow Trend -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex-1 flex flex-col h-full min-h-[400px]">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline-md text-headline-md text-on-surface">Cash Flow Trend</h3>
+<button class="p-1 text-on-surface-variant hover:bg-surface-variant rounded">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<div class="flex-1 relative w-full h-full min-h-[250px] mt-auto">
+<!-- Faux Area Chart -->
+<div class="absolute inset-0 flex items-end">
+<!-- Area gradient -->
+<div class="w-full h-[60%] bg-gradient-to-t from-primary-fixed/50 to-primary/10" style="clip-path: polygon(0 40%, 10% 30%, 20% 50%, 30% 20%, 40% 60%, 50% 10%, 60% 40%, 70% 20%, 80% 50%, 90% 10%, 100% 30%, 100% 100%, 0 100%);"></div>
+</div>
+<!-- Line path -->
+<div class="absolute inset-0 flex items-end">
+<svg class="w-full h-full" preserveaspectratio="none" style="overflow: visible;" viewbox="0 0 100 100">
+<path class="text-primary" d="M0,60 L10,70 L20,50 L30,80 L40,40 L50,90 L60,60 L70,80 L80,50 L90,90 L100,70" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+<!-- Data points -->
+<circle class="fill-surface stroke-primary" cx="50" cy="90" r="4" stroke-width="2"></circle>
+<circle class="fill-surface stroke-primary" cx="90" cy="90" r="4" stroke-width="2"></circle>
+</svg>
+</div>
+<!-- Tooltip Faux -->
+<div class="absolute top-[20%] left-[45%] bg-inverse-surface text-inverse-on-surface px-3 py-2 rounded shadow-lg text-xs font-label-bold z-10 pointer-events-none">
+                                $450k<br/><span class="text-inverse-on-surface/70 font-normal">Jun 15</span>
+<div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-inverse-surface rotate-45"></div>
+</div>
+<!-- Grid Lines -->
+<div class="absolute inset-0 flex flex-col justify-between pointer-events-none">
+<div class="w-full border-t border-outline-variant/30 border-dashed h-0"></div>
+<div class="w-full border-t border-outline-variant/30 border-dashed h-0"></div>
+<div class="w-full border-t border-outline-variant/30 border-dashed h-0"></div>
+<div class="w-full border-t border-outline-variant/30 border-dashed h-0"></div>
+<div class="w-full border-t border-outline-variant/30 border-dashed h-0"></div>
+</div>
+</div>
+<!-- X Axis Labels -->
+<div class="flex justify-between mt-4 text-caption font-caption text-on-surface-variant px-2">
+<span>Jan</span>
+<span>Feb</span>
+<span>Mar</span>
+<span>Apr</span>
+<span>May</span>
+<span>Jun</span>
+</div>
+</div>
+</div>
+<!-- Section 3: Right Section (4 cols) -->
+<div class="col-span-12 lg:col-span-4 flex flex-col gap-stack-md">
+<!-- Budget Allocation -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-4">Budget Allocation</h3>
+<div class="flex items-center justify-between">
+<div class="relative w-28 h-28 flex-shrink-0">
+<!-- Faux Donut Chart -->
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 100 100">
+<circle class="text-surface-container" cx="50" cy="50" fill="transparent" r="40" stroke="currentColor" stroke-width="20"></circle>
+<circle class="text-primary" cx="50" cy="50" fill="transparent" r="40" stroke="currentColor" stroke-dasharray="100 151" stroke-dashoffset="0" stroke-width="20"></circle>
+<circle class="text-tertiary-fixed-dim" cx="50" cy="50" fill="transparent" r="40" stroke="currentColor" stroke-dasharray="80 171" stroke-dashoffset="-100" stroke-width="20"></circle>
+<circle class="text-secondary" cx="50" cy="50" fill="transparent" r="40" stroke="currentColor" stroke-dasharray="40 211" stroke-dashoffset="-180" stroke-width="20"></circle>
+</svg>
+<div class="absolute inset-0 flex items-center justify-center flex-col">
+<span class="font-label-bold text-label-bold text-on-surface-variant">Total</span>
+<span class="font-headline-md text-sm font-bold text-on-surface">100%</span>
+</div>
+</div>
+<div class="flex-1 ml-6 space-y-3">
+<div class="flex items-center justify-between text-body-sm font-body-sm">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-primary"></div>
+<span class="text-on-surface-variant">Operations</span>
+</div>
+<span class="font-label-bold text-on-surface">45%</span>
+</div>
+<div class="flex items-center justify-between text-body-sm font-body-sm">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-tertiary-fixed-dim"></div>
+<span class="text-on-surface-variant">Marketing</span>
+</div>
+<span class="font-label-bold text-on-surface">35%</span>
+</div>
+<div class="flex items-center justify-between text-body-sm font-body-sm">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-secondary"></div>
+<span class="text-on-surface-variant">R&amp;D</span>
+</div>
+<span class="font-label-bold text-on-surface">20%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Recent Transactions -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-card-internal shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex-1 overflow-hidden flex flex-col">
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-headline-md text-headline-md text-on-surface">Recent Transactions</h3>
+<button class="text-primary font-label-bold text-label-bold hover:underline">View All</button>
+</div>
+<div class="flex-1 overflow-auto pr-2 -mr-2">
+<div class="space-y-4">
+<!-- Row 1 -->
+<div class="flex items-center justify-between pb-3 border-b border-surface-variant last:border-0 last:pb-0">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[16px]">cloud</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm font-medium text-on-surface">AWS Services</p>
+<p class="font-caption text-caption text-on-surface-variant">Jun 14, 2024</p>
+</div>
+</div>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">-$12,450</span>
+</div>
+<!-- Row 2 -->
+<div class="flex items-center justify-between pb-3 border-b border-surface-variant last:border-0 last:pb-0">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-secondary-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm font-medium text-on-surface">Client Payment</p>
+<p class="font-caption text-caption text-on-surface-variant">Jun 12, 2024</p>
+</div>
+</div>
+<span class="font-body-sm text-body-sm font-semibold text-secondary">+$45,000</span>
+</div>
+<!-- Row 3 -->
+<div class="flex items-center justify-between pb-3 border-b border-surface-variant last:border-0 last:pb-0">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[16px]">apartment</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm font-medium text-on-surface">Office Lease</p>
+<p class="font-caption text-caption text-on-surface-variant">Jun 01, 2024</p>
+</div>
+</div>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">-$8,500</span>
+</div>
+<!-- Row 4 -->
+<div class="flex items-center justify-between pb-3 border-b border-surface-variant last:border-0 last:pb-0">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[16px]">campaign</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm font-medium text-on-surface">Ad Campaign</p>
+<p class="font-caption text-caption text-on-surface-variant">May 28, 2024</p>
+</div>
+</div>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">-$5,200</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>
