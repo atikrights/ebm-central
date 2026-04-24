@@ -1,4 +1,4 @@
-name: Deploy EBM Central (Full Multi-Platform)
+name: Deploy EBM Central (Android, Windows, Mac)
 
 on:
   push:
@@ -17,10 +17,13 @@ jobs:
         with:
           channel: 'stable'
           cache: true
-      - name: Build Web
+      - name: Get Frontend dependencies
         run: |
           cd frontend
           flutter pub get
+      - name: Build Web
+        run: |
+          cd frontend
           flutter build web --release --dart-define=PUSHER_KEY=${{ secrets.PUSHER_KEY }}
       - name: Build Android APK
         run: |
@@ -44,8 +47,8 @@ jobs:
           name: central-android-apk
           path: frontend/build/app/outputs/flutter-apk/app-release.apk
 
-  build-windows-mac:
-    name: 💻 Windows & Mac Build
+  build-desktop:
+    name: 💻 Desktop Build
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
@@ -57,10 +60,14 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+      - name: Configure Desktop Support
+        run: |
+          cd frontend
+          flutter create --platforms=windows,macos,android .
+          flutter pub get
       - name: Build Platform
         run: |
           cd frontend
-          flutter pub get
           if ("${{ matrix.os }}" -eq "windows-latest") { flutter build windows --release }
           if ("${{ matrix.os }}" -eq "macos-latest") { flutter build macos --release }
         shell: pwsh
@@ -74,7 +81,7 @@ jobs:
 
   create-release:
     name: 🚀 Create Full Release
-    needs: [build-and-deploy-linux, build-windows-mac]
+    needs: [build-and-deploy-linux, build-desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -87,8 +94,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
-          name: "Central Full Release v1.0.${{ github.run_number }}"
-          body: "Multi-platform automated build for EBM Central."
+          name: "Central Release v1.0.${{ github.run_number }}"
+          body: "Automated build for EBM Central (Android, Windows, Mac)."
           files: release-files/**/*.*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
