@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -66,6 +65,32 @@ jobs:
             frontend/build/app/outputs/flutter-apk/app-release.apk \
             ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/u200841033/domains/ebfic.store/public_html/central/
 
-      - name: Cleanup SSH Key
-        if: always()
-        run: rm -f ~/.ssh/id_rsa
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: central-android-apk
+          path: frontend/build/app/outputs/flutter-apk/app-release.apk
+
+  create-release:
+    name: 🚀 Create GitHub Release
+    needs: [build-and-deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: central-android-apk
+          path: release-files
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Release v1.0.${{ github.run_number }}"
+          body: "Automated build for EBM Central. Version: 1.0.${{ github.run_number }}"
+          draft: false
+          prerelease: false
+          files: |
+            release-files/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
