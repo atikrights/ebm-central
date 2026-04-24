@@ -1,4 +1,4 @@
-name: Deploy EBM Central (Frontend & Backend)
+name: Deploy EBM Central (Frontend, Backend & App)
 
 on:
   push:
@@ -30,6 +30,11 @@ jobs:
           cd frontend
           flutter build web --release --dart-define=PUSHER_KEY=${{ secrets.PUSHER_KEY }}
 
+      - name: Build Android APK
+        run: |
+          cd frontend
+          flutter build apk --release --no-tree-shake-icons
+
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
@@ -52,6 +57,13 @@ jobs:
           rsync -avz --delete \
             -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             frontend/build/web/ \
+            ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/u200841033/domains/ebfic.store/public_html/central/
+
+      - name: Deploy APK to server
+        run: |
+          rsync -avz \
+            -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            frontend/build/app/outputs/flutter-apk/app-release.apk \
             ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/u200841033/domains/ebfic.store/public_html/central/
 
       - name: Cleanup SSH Key
