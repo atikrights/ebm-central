@@ -1,4 +1,4 @@
-name: Deploy EBM Central (Frontend, Backend & App)
+name: Deploy EBM Central (Full Multi-Platform)
 
 on:
   push:
@@ -6,91 +6,89 @@ on:
       - main
 
 jobs:
-  build-and-deploy:
-    name: 🚀 Build & Deploy EBM Central
+  build-and-deploy-linux:
+    name: 🚀 Linux Build & Deploy (Web, Backend, Android)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
-
-      - name: Get Frontend dependencies
+      - name: Build Web
         run: |
           cd frontend
           flutter pub get
-
-      - name: Build Flutter Web
-        run: |
-          cd frontend
           flutter build web --release --dart-define=PUSHER_KEY=${{ secrets.PUSHER_KEY }}
-
       - name: Build Android APK
         run: |
           cd frontend
           flutter build apk --release --no-tree-shake-icons
-
-      - name: Setup SSH Key
+      - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -p 65002 -H ${{ secrets.REMOTE_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
-
-      - name: Deploy Backend via rsync
+      - name: Deploy Backend
         run: |
-          rsync -avz --delete --exclude '.env' \
-            --exclude 'storage/app' \
-            --exclude 'storage/framework' \
-            --exclude 'storage/logs' \
-            -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-            backend/ \
-            ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/u200841033/domains/ebfic.store/public_html/central/api/
-
-      - name: Deploy Frontend via rsync
+          rsync -avz --delete --exclude '.env' --exclude 'storage/' -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" backend/ ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/u200841033/domains/ebfic.store/public_html/central/api/
+      - name: Deploy Frontend
         run: |
-          rsync -avz --delete \
-            -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-            frontend/build/web/ \
-            ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/u200841033/domains/ebfic.store/public_html/central/
-
-      - name: Deploy APK to server
-        run: |
-          rsync -avz \
-            -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-            frontend/build/app/outputs/flutter-apk/app-release.apk \
-            ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/u200841033/domains/ebfic.store/public_html/central/
-
+          rsync -avz --delete -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" frontend/build/web/ ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/u200841033/domains/ebfic.store/public_html/central/
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
         with:
           name: central-android-apk
           path: frontend/build/app/outputs/flutter-apk/app-release.apk
 
-  create-release:
-    name: 🚀 Create GitHub Release
-    needs: [build-and-deploy]
-    runs-on: ubuntu-latest
+  build-windows-mac:
+    name: 💻 Windows & Mac Build
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Download Android APK
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - name: Build Platform
+        run: |
+          cd frontend
+          flutter pub get
+          if ("${{ matrix.os }}" -eq "windows-latest") { flutter build windows --release }
+          if ("${{ matrix.os }}" -eq "macos-latest") { flutter build macos --release --no-codesign }
+        shell: pwsh
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: central-${{ matrix.os }}
+          path: |
+            frontend/build/windows/x64/runner/Release/
+            frontend/build/macos/Build/Products/Release/
+
+  create-release:
+    name: 🚀 Create Full Release
+    needs: [build-and-deploy-linux, build-windows-mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: central-android-apk
           path: release-files
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
-          name: "Release v1.0.${{ github.run_number }}"
-          body: "Automated build for EBM Central. Version: 1.0.${{ github.run_number }}"
-          draft: false
-          prerelease: false
-          files: |
-            release-files/*.apk
+          name: "Central Full Release v1.0.${{ github.run_number }}"
+          body: "Multi-platform automated build for EBM Central."
+          files: release-files/**/*.*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
