@@ -71,13 +71,20 @@ jobs:
           if ("${{ matrix.os }}" -eq "windows-latest") { flutter build windows --release }
           if ("${{ matrix.os }}" -eq "macos-latest") { flutter build macos --release }
         shell: pwsh
-      - name: Upload Artifacts
+      - name: Package Desktop Build (Zip)
+        run: |
+          if ("${{ matrix.os }}" -eq "windows-latest") { 
+            Compress-Archive -Path frontend/build/windows/x64/runner/Release/* -DestinationPath ebm-central-windows.zip 
+          }
+          if ("${{ matrix.os }}" -eq "macos-latest") { 
+            Compress-Archive -Path frontend/build/macos/Build/Products/Release/* -DestinationPath ebm-central-macos.zip 
+          }
+        shell: pwsh
+      - name: Upload Packaged Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: central-${{ matrix.os }}
-          path: |
-            frontend/build/windows/x64/runner/Release/
-            frontend/build/macos/Build/Products/Release/
+          name: central-packaged-${{ matrix.os }}
+          path: ebm-central-*.zip
 
   create-release:
     name: 🚀 Create Full Release
@@ -90,12 +97,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-files
+      - name: Flatten Files
+        run: |
+          mkdir final-release
+          find release-files -name "*.apk" -exec cp {} final-release/ \;
+          find release-files -name "*.zip" -exec cp {} final-release/ \;
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: "Central Release v1.0.${{ github.run_number }}"
           body: "Automated build for EBM Central (Android, Windows, Mac)."
-          files: release-files/**/*.*
+          files: final-release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
