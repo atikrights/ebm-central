@@ -59,4 +59,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Governance & Security Mesh
     Route::post('governance/invite', [\App\Http\Controllers\API\GovernanceController::class, 'generateInvitation']);
     Route::get('governance/users', [\App\Http\Controllers\API\GovernanceController::class, 'systemUsers']);
+
+    // Secure Database Vault
+    Route::get('security/databases', [\App\Http\Controllers\API\DatabaseController::class, 'index']);
+    Route::post('security/databases', [\App\Http\Controllers\API\DatabaseController::class, 'store']);
+    Route::delete('security/databases/{id}', [\App\Http\Controllers\API\DatabaseController::class, 'destroy']);
+    Route::get('security/system-status', [\App\Http\Controllers\API\DatabaseController::class, 'systemStatus']);
 });
