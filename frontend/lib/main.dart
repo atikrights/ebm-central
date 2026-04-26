@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
-import 'core/layout/app_layout.dart';
+import 'core/router/app_router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,14 +37,15 @@ class EbficbmApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentTheme = ref.watch(themeNotifierProvider);
+    final router = ref.watch(appRouterProvider);
 
-    return MaterialApp(
-      title: 'EBFICBM OS',
+    return MaterialApp.router(
+      title: 'EBM Central',
       debugShowCheckedModeBanner: false,
-      themeMode: currentTheme, // Dynamic from Riverpod
+      themeMode: currentTheme,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      home: const AppLayout(),
+      routerConfig: router,
     );
   }
 }
