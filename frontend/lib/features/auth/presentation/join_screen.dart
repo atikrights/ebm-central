@@ -8,9 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../../core/auth/auth_provider.dart';
-import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../../../core/auth/auth_provider.dart';
+import '../../../core/network/api_service.dart';
 
 class JoinScreen extends ConsumerStatefulWidget {
   final String token;
@@ -54,23 +52,29 @@ class _JoinScreenState extends ConsumerState<JoinScreen>
   }
 
   Future<void> _validateToken() async {
-    // TODO: Replace with real API call:
-    // GET /api/invite/validate/${widget.token}
-    await Future.delayed(const Duration(milliseconds: 1800));
+    setState(() => _isValidating = true);
+    
+    try {
+      final api = ref.read(apiServiceProvider);
+      // Real API call to validate the token
+      final data = await api.get('/governance/invite/validate/${widget.token}');
 
-    if (!mounted) return;
-
-    // Simulate backend validation — token is valid if non-empty
-    final isValid = widget.token.isNotEmpty && widget.token.length >= 6;
-
-    setState(() {
-      _isValidating = false;
-      _isValidToken = isValid;
-      // In real impl, email comes from backend response
-      _tokenEmail = isValid ? 'admin@ebfic.store' : '';
-    });
-
-    if (isValid) _animController.forward();
+      if (mounted) {
+        setState(() {
+          _isValidating = false;
+          _isValidToken = true;
+          _tokenEmail = data['email'] ?? '';
+        });
+        _animController.forward();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isValidating = false;
+          _isValidToken = false;
+        });
+      }
+    }
   }
 
   Future<void> _handleRegister() async {

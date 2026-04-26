@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../network/api_service.dart';
 
 // ─────────────────────────────────────────────
 // Auth State Model
@@ -78,28 +79,19 @@ class AuthNotifier extends Notifier<AuthState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      // TODO: Replace with real API call: POST /api/auth/login
-      await Future.delayed(const Duration(seconds: 2));
+      final api = ref.read(apiServiceProvider);
+      final response = await api.post('/login', {
+        'email': email,
+        'password': password,
+      });
 
-      String? simulatedRole;
-      String? simulatedName;
-
-      if (email == 'admin@ebfic.store' && password == 'admin123') {
-        simulatedRole = 'ADMIN';
-        simulatedName = 'Admin User';
-      } else if (email == 'super@ebfic.store' && password == 'super123') {
-        simulatedRole = 'SUPER ADMIN';
-        simulatedName = 'Super Admin';
-      } else if (email.contains('@')) {
-        // Non-admin user — DENY
-        simulatedRole = 'STAFF';
-        simulatedName = 'Staff Member';
-      } else {
-        throw Exception('Invalid credentials');
-      }
+      final String token = response['access_token'];
+      final userData = response['user'];
+      final String role = userData['role'];
+      final String name = userData['name'];
 
       // ── ROLE GUARD: Only ADMIN / SUPER ADMIN allowed ──
-      if (simulatedRole != 'ADMIN' && simulatedRole != 'SUPER ADMIN') {
+      if (role.toUpperCase() != 'ADMIN' && role.toUpperCase() != 'SUPER_ADMIN' && role.toUpperCase() != 'SUPER ADMIN') {
         state = state.copyWith(
           isLoading: false,
           error: 'Access Denied! Only Administrators can access EBM Central.',
@@ -108,16 +100,18 @@ class AuthNotifier extends Notifier<AuthState> {
       }
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_token', 'demo_token_${DateTime.now().millisecondsSinceEpoch}');
-      await prefs.setString('user_role', simulatedRole);
-      await prefs.setString('user_name', simulatedName);
+      await prefs.setString('auth_token', token);
+      await prefs.setString('user_role', role.toUpperCase());
+      await prefs.setString('user_name', name);
       await prefs.setString('user_email', email);
+
+      api.setToken(token);
 
       state = AuthState(
         isLoggedIn: true,
-        name: simulatedName,
+        name: name,
         email: email,
-        role: simulatedRole,
+        role: role.toUpperCase(),
       );
     } catch (e) {
       state = state.copyWith(
@@ -137,24 +131,36 @@ class AuthNotifier extends Notifier<AuthState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      // TODO: Call POST /api/invite/register
-      await Future.delayed(const Duration(seconds: 2));
+      final api = ref.read(apiServiceProvider);
+      final response = await api.post('/register', {
+        'invitation_token': token,
+        'name': name,
+        'email': email,
+        'password': password,
+        'password_confirmation': password, // Assuming backend requires confirmation
+      });
+
+      final String authToken = response['access_token'];
+      final userData = response['user'];
+      final String role = userData['role'];
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_token', 'token_$token');
-      await prefs.setString('user_role', 'ADMIN');
+      await prefs.setString('auth_token', authToken);
+      await prefs.setString('user_role', role.toUpperCase());
       await prefs.setString('user_name', name);
       await prefs.setString('user_email', email);
+
+      api.setToken(authToken);
 
       state = AuthState(
         isLoggedIn: true,
         name: name,
         email: email,
-        role: 'ADMIN',
+        role: role.toUpperCase(),
       );
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, error: e.toString().replaceFirst('Exception: ', ''));
       return false;
     }
   }

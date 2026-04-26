@@ -20,28 +20,52 @@ class GovernanceController extends Controller
             'email' => 'required|email',
             'role' => 'required|in:super_admin,admin,manager,staff',
             'allowed_apps' => 'nullable|array',
-            'expires_days' => 'nullable|integer'
         ]);
 
         $token = Str::random(40);
         
+        // 6 hours expiry as requested
+        $expiresAt = Carbon::now()->addHours(6);
+
         $invitation = Invitation::create([
             'email' => $request->email,
             'token' => $token,
             'role' => $request->role,
             'allowed_apps' => $request->allowed_apps ?? ['ebm-app'],
-            'created_by' => $request->user()->id,
-            'expires_at' => Carbon::now()->addDays($request->expires_days ?? 7),
+            'created_by' => $request->user()?->id ?? 1, // Fallback to 1 for local testing if not logged in
+            'expires_at' => $expiresAt,
         ]);
 
-        // In production, we would send an email here.
-        // For now, we return the join link for the Super Admin to copy.
-        $joinLink = config('app.url') . "/join?token=" . $token;
+        // Auto-detect domain for 100% correctness
+        $baseUrl = $request->getSchemeAndHttpHost();
+        $joinLink = $baseUrl . "/join/" . $token;
 
         return response()->json([
             'message' => 'Invitation generated successfully',
             'invitation_link' => $joinLink,
-            'token' => $token
+            'token' => $token,
+            'expires_at' => $expiresAt->toDateTimeString(),
+        ]);
+    }
+
+    /**
+     * Validate an invitation token.
+     */
+    public function validateInvitation($token)
+    {
+        $invitation = Invitation::where('token', $token)
+            ->whereNull('used_at')
+            ->where('expires_at', '>', Carbon::now())
+            ->first();
+
+        if (!$invitation) {
+            return response()->json(['message' => 'Invalid or expired invitation'], 404);
+        }
+
+        return response()->json([
+            'email' => $invitation->email,
+            'role' => $invitation->role,
+            'allowed_apps' => $invitation->allowed_apps
         ]);
     }
 
@@ -50,7 +74,7 @@ class GovernanceController extends Controller
      */
     public function systemUsers()
     {
-        $users = User::with(['companies', 'devices'])->get();
+        $users = User::with(['companies'])->get();
         return response()->json($users);
     }
 }

@@ -38,6 +38,9 @@ jobs:
       - name: Deploy Backend
         run: |
           rsync -avz --delete --exclude '.env' --exclude 'storage/' -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" backend/ ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/u200841033/domains/ebfic.store/public_html/central/api/
+      - name: Run Database Migrations
+        run: |
+          ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "cd /home/u200841033/domains/ebfic.store/public_html/central/api && php artisan migrate --force"
       - name: Deploy Frontend
         run: |
           rsync -avz --delete -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" frontend/build/web/ ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/home/u200841033/domains/ebfic.store/public_html/central/

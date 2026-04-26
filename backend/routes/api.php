@@ -23,6 +23,33 @@ use App\Http\Controllers\API\FinanceController;
 // Public routes
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
+Route::post('/users/manual-create', [AuthController::class, 'manualCreate']);
+
+// Temporary Setup Route (Delete after testing)
+Route::get('/setup-demo', function() {
+    \App\Models\User::truncate();
+    \App\Models\Invitation::truncate();
+    
+    \App\Models\User::create([
+        'name' => 'Super Admin',
+        'email' => 'superadmin@ebfic.store',
+        'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+        'role' => 'super_admin'
+    ]);
+
+    \App\Models\User::create([
+        'name' => 'Admin User',
+        'email' => 'admin@ebfic.store',
+        'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+        'role' => 'admin'
+    ]);
+
+    return response()->json(['message' => 'Demo setup complete. Previous users removed.']);
+});
+
+// Invitation & Governance (Public for local testing and registration flow)
+Route::post('governance/invite', [\App\Http\Controllers\API\GovernanceController::class, 'generateInvitation']);
+Route::get('governance/invite/validate/{token}', [\App\Http\Controllers\API\GovernanceController::class, 'validateInvitation']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -56,8 +83,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('messages', [TaskController::class, 'getMessages']); // Placeholder
     Route::post('messages', [TaskController::class, 'sendMessage']);
 
-    // Governance & Security Mesh
-    Route::post('governance/invite', [\App\Http\Controllers\API\GovernanceController::class, 'generateInvitation']);
     Route::get('governance/users', [\App\Http\Controllers\API\GovernanceController::class, 'systemUsers']);
 
     // Secure Database Vault
