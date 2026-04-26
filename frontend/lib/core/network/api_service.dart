@@ -7,7 +7,19 @@ final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
 
 class ApiService {
   // Use 10.0.2.2 for Android Emulator, localhost for iOS/Web/Desktop
-  final String baseUrl = 'http://localhost:8000/api';
+  // Dynamic base URL for local and production
+  String get baseUrl {
+    if (const bool.fromEnvironment('dart.library.html')) {
+      final String host = Uri.base.host;
+      if (host == 'central.ebfic.store') {
+        return 'https://central.ebfic.store/api/public/api'; // Hostinger public_html path
+      }
+      if (host.isNotEmpty && host != 'localhost') {
+         return 'https://$host/api/public/api';
+      }
+    }
+    return 'http://localhost:8000/api';
+  }
   String? token; // JWT token from Laravel
 
   void setToken(String newToken) {
