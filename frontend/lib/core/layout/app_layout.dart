@@ -76,6 +76,7 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
   bool _isLoading = true;
   Timer? _globalCallTicker;
   final Set<String> _expandedMenus = {}; // Track expanded sidebar menus
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -153,7 +154,9 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     final isDesktopOS = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: theme.scaffoldBackgroundColor,
+      endDrawer: !isDesktop ? _buildDrawer(isDark) : null,
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 800),
         switchInCurve: Curves.easeInOut,
@@ -311,9 +314,9 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
       children: [
         // Content below header and above bottom nav
         Padding(
-          padding: const EdgeInsets.only(
+          padding: EdgeInsets.only(
             top: kGlobalHeaderHeight,
-            bottom: 80,
+            bottom: 70 + MediaQuery.of(context).padding.bottom, // Adjusted for sleek nav
           ),
           child: _buildContentArea(),
         ),
@@ -332,22 +335,23 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
   }
 
   Widget _buildTabletLayout(bool isDark) {
-    return Row(
+    return Stack(
       children: [
-        _buildSidebar(isDark, isExpanded: false),
-        Expanded(
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: kGlobalHeaderHeight),
-                child: _buildContentArea(),
-              ),
-              Positioned(
-                top: 0, left: 0, right: 0,
-                child: _buildGlobalHeader(isDark, isDesktop: false, isMobile: false, isDesktopOS: false),
-              ),
-            ],
+        Padding(
+          padding: EdgeInsets.only(
+            top: kGlobalHeaderHeight,
+            bottom: 70 + MediaQuery.of(context).padding.bottom, // Adjusted for sleek nav
           ),
+          child: _buildContentArea(),
+        ),
+        Positioned(
+          top: 0, left: 0, right: 0,
+          child: _buildGlobalHeader(isDark, isDesktop: false, isMobile: false, isDesktopOS: false),
+        ),
+        // Bottom nav
+        Positioned(
+          bottom: 0, left: 0, right: 0,
+          child: _buildBottomNav(isDark),
         ),
       ],
     );
@@ -456,6 +460,12 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                         child: Icon(Icons.person_outline,
                           color: Theme.of(context).colorScheme.primary, size: 16),
                       ),
+                      if (!isDesktop) ...[
+                        const SizedBox(width: 12),
+                        _headerIcon(Icons.menu_rounded, isDark, () {
+                          _scaffoldKey.currentState?.openEndDrawer();
+                        }),
+                      ],
                     ],
                   ),
                 ],
@@ -487,8 +497,25 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     );
   }
 
-  Widget _buildSidebar(bool isDark, {required bool isExpanded}) {
-    final width = isExpanded ? 240.0 : 80.0;
+  Widget _buildDrawer(bool isDark) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        drawerTheme: const DrawerThemeData(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+        ),
+      ),
+      child: Drawer(
+        width: 280.0,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: _buildSidebar(isDark, isExpanded: true, isDrawer: true),
+      ),
+    );
+  }
+
+  Widget _buildSidebar(bool isDark, {required bool isExpanded, bool isDrawer = false}) {
+    final width = isDrawer ? double.infinity : (isExpanded ? 240.0 : 80.0);
     final bgColor = isDark
         ? const Color(0xFF0F1117).withOpacity(0.85)
         : const Color(0xFFF8FAFC).withOpacity(0.92);
@@ -507,7 +534,7 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
           child: Column(
             crossAxisAlignment: isExpanded ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
-          const SizedBox(height: 24),
+          SizedBox(height: isDrawer ? MediaQuery.of(context).padding.top + 24 : 24),
           if (isExpanded)
             Padding(
               padding: const EdgeInsets.only(left: 20, bottom: 20),
@@ -736,7 +763,12 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                       
                       Expanded(
                         child: InkWell(
-                          onTap: () => setState(() => _currentIndex = sub.index),
+                          onTap: () {
+                            setState(() => _currentIndex = sub.index);
+                            if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
+                              _scaffoldKey.currentState?.closeEndDrawer();
+                            }
+                          },
                           child: Container(
                             margin: const EdgeInsets.symmetric(vertical: 1, horizontal: 6),
                             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
@@ -776,7 +808,12 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     final unselectedColor = isDark ? Colors.white54 : Colors.black54;
 
     return InkWell(
-      onTap: () => setState(() => _currentIndex = index),
+      onTap: () {
+        setState(() => _currentIndex = index);
+        if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
+          _scaffoldKey.currentState?.closeEndDrawer();
+        }
+      },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 10),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
@@ -829,31 +866,39 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
   }
 
   Widget _buildBottomNav(bool isDark) {
-    final bgColor = isDark ? const Color(0xFF070B14).withOpacity(0.7) : const Color(0xFFE2E8F0).withOpacity(0.85);
+    final bgColor = isDark ? const Color(0xFF0F1117).withOpacity(0.95) : const Color(0xFFF8FAFC).withOpacity(0.98);
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final fixedHeight = 62.0 + (bottomPadding > 0 ? bottomPadding : 0); // Sleek reduced height
 
     return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), // Taller
+          height: fixedHeight,
+          padding: EdgeInsets.only(bottom: bottomPadding > 0 ? bottomPadding : 0, left: 8, right: 8),
           decoration: BoxDecoration(
             color: bgColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-            border: Border(top: BorderSide(color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05))),
+            border: Border(top: BorderSide(color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05))),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.5 : 0.1),
+                blurRadius: 20,
+                offset: const Offset(0, -5),
+              )
+            ]
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-          _bottomNavItem(0, Icons.sensors_rounded, 'Live', isDark),
-          _bottomNavItem(1, Icons.home_filled, 'Home', isDark),
-          _bottomNavItem(2, Icons.auto_awesome_motion, 'Board', isDark),
-          _bottomNavItem(3, Icons.business_center, 'Depts', isDark),
-          _bottomNavItem(4, Icons.add_circle, 'Add', isDark),
-          _bottomNavItem(5, Icons.chat_bubble, 'Chat', isDark),
-          _bottomNavItem(6, Icons.person, 'Profile', isDark),
-        ],
-      ),
-    ),
+                _bottomNavItem(1, Icons.home_filled, 'Home', isDark),
+                _bottomNavItem(23, Icons.dashboard_customize_rounded, 'Overview', isDark),
+                _bottomNavItem(3, Icons.business_center_rounded, 'Workplace', isDark),
+                _bottomNavItem(5, Icons.chat_bubble_rounded, 'Chat', isDark),
+                _bottomNavItem(2, Icons.auto_awesome_motion_rounded, 'Board', isDark),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -865,21 +910,52 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
 
     return GestureDetector(
       onTap: () => setState(() => _currentIndex = index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: isSelected ? primaryColor : unselectedColor, size: 22), // Slightly smaller icons
-          const SizedBox(height: 2),
-          Text(
-            label,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 9, // Smaller font for many items
-              color: isSelected ? primaryColor : unselectedColor,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        padding: EdgeInsets.symmetric(horizontal: isSelected ? 18 : 12, vertical: 8), // Sleeker padding
+        decoration: BoxDecoration(
+          color: isSelected ? primaryColor.withOpacity(isDark ? 0.2 : 0.12) : Colors.transparent, // Better contrast
+          borderRadius: BorderRadius.circular(20), // Modern smaller pill radius
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedScale(
+              scale: isSelected ? 1.05 : 0.95,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutBack, // Bouncy snappy modern animation
+              child: Icon(
+                icon,
+                color: isSelected ? primaryColor : unselectedColor,
+                size: 24,
+              ),
             ),
-          ),
-        ],
+            AnimatedSize(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: isSelected ? null : 0,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: primaryColor,
+                      fontWeight: FontWeight.w800, // Extra bold for a highly modern look
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
