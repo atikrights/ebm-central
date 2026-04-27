@@ -62,6 +62,9 @@ class AuthNotifier extends Notifier<AuthState> {
     final email = prefs.getString('user_email');
 
     if (token != null && role != null) {
+      final api = ref.read(apiServiceProvider);
+      api.setToken(token);
+      
       state = AuthState(
         isLoggedIn: true,
         name: name,

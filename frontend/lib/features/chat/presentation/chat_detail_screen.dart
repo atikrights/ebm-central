@@ -5,6 +5,8 @@ import 'package:window_manager/window_manager.dart';
 import 'dart:async';
 import '../../../shared/widgets/glass_card.dart';
 import 'call_screen.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../data/chat_service.dart';
 
 class CallController extends ChangeNotifier {
   static final CallController instance = CallController();
@@ -65,8 +67,17 @@ class ChatPopupModel {
   }) : controller = TextEditingController();
 }
 
-class ChatDetailScreen extends StatefulWidget {
-  const ChatDetailScreen({super.key});
+class ChatDetailScreen extends ConsumerStatefulWidget {
+  final String receiverType;
+  final String chatName;
+  final Color chatColor;
+
+  const ChatDetailScreen({
+    super.key,
+    this.receiverType = 'self',
+    this.chatName = 'Notes (You)',
+    this.chatColor = Colors.blue,
+  });
 
   static void cleanupChat(BuildContext context, String name) {
     _ChatDetailScreenState.cleanupChat(context, name);
@@ -77,12 +88,17 @@ class ChatDetailScreen extends StatefulWidget {
   }
 
   @override
-  State<ChatDetailScreen> createState() => _ChatDetailScreenState();
+  ConsumerState<ChatDetailScreen> createState() => _ChatDetailScreenState();
 }
 
-class _ChatDetailScreenState extends State<ChatDetailScreen> {
+class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   bool _isTyping = false;
+  bool _isAiGenerating = false;
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _currentMessages = [];
+  Timer? _typewriterTimer;
   
   // Static registry to track active popups globally
   static final List<ChatPopupModel> _activePopups = [];
@@ -90,6 +106,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
   static _ChatDetailScreenState? _instance;
   Timer? _callTicker;
+  Timer? _incomingTypewriterTimer;
+  bool _isIncomingAiTyping = false;
 
   @override
   void initState() {
@@ -97,10 +115,52 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     _instance = this;
     CallController.instance.addListener(_onCallStateChanged);
     _startCallTicker();
-    // CLEAN UP: If we enter the main chat page, remove any active bubbles/popups for this user
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        cleanupChat(context, "Tanvir Ahmed"); 
+        cleanupChat(context, widget.chatName); 
+      }
+    });
+    _loadMessages();
+  }
+
+  Future<void> _loadMessages() async {
+    setState(() => _isLoading = true);
+    try {
+      final service = ref.read(chatServiceProvider);
+      final messages = await service.getChats(widget.receiverType);
+      
+      if (mounted) {
+        setState(() {
+          if (messages.isEmpty) {
+            _currentMessages = [
+              if (widget.receiverType == 'self')
+                {'sender': 'System', 'message': 'Welcome to your private space. Personal notes and reminders go here.', 'isMe': false}
+              else
+                {'sender': 'AI Assistant', 'message': 'Hello! I am your official EBM AI Assistant. How can I help you today?', 'isMe': false}
+            ];
+          } else {
+            _currentMessages = messages;
+          }
+          _isLoading = false;
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to load messages: $e")));
+      }
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
       }
     });
   }
@@ -145,12 +205,181 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
   void _triggerUpdate(BuildContext context) => _updateOverlay(context);
 
+  void _startTypewriter(String fullText) {
+    _messageController.clear();
+    int charIndex = 0;
+    _typewriterTimer?.cancel();
+    
+    _typewriterTimer = Timer.periodic(const Duration(milliseconds: 15), (timer) {
+      if (charIndex < fullText.length) {
+        if (mounted) {
+          setState(() {
+            _messageController.text += fullText[charIndex];
+            _messageController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _messageController.text.length),
+            );
+            charIndex++;
+          });
+        }
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  Future<void> _generateAiResponse(String userPrompt) async {
+    setState(() => _isAiGenerating = true);
+    // Show a typing indicator immediately
+    if (mounted) {
+      setState(() {
+        _currentMessages.add({
+          'sender': 'AI Assistant',
+          'message': '...',
+          'isMe': false,
+          'isTyping': true,
+        });
+      });
+      _scrollToBottom();
+    }
+
+    try {
+      final chatService = ref.read(chatServiceProvider);
+      // getAiReply calls /chat/ai/generate, gets the reply, and stores it encrypted
+      final aiReply = await chatService.getAiReply(userPrompt);
+
+      if (mounted) {
+        setState(() {
+          _isAiGenerating = false;
+          // Replace the typing indicator with the actual reply
+          _currentMessages.removeWhere((m) => m['isTyping'] == true);
+        });
+        _startIncomingTypewriter(aiReply);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isAiGenerating = false;
+          _currentMessages.removeWhere((m) => m['isTyping'] == true);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("AI Error: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  void _startIncomingTypewriter(String fullText) {
+    _incomingTypewriterTimer?.cancel();
+    int charIndex = 0;
+    
+    setState(() {
+      _isIncomingAiTyping = true;
+      _currentMessages.add({
+        'sender': 'AI Assistant',
+        'message': '',
+        'isMe': false,
+        'isIncomingTyping': true,
+      });
+    });
+
+    _incomingTypewriterTimer = Timer.periodic(const Duration(milliseconds: 15), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      if (charIndex < fullText.length) {
+        setState(() {
+          // Update the last message safely
+          if (_currentMessages.isNotEmpty) {
+             _currentMessages.last['message'] = fullText.substring(0, charIndex + 1);
+          }
+          charIndex++;
+        });
+        // Limit scroll calls to prevent lag
+        if (charIndex % 5 == 0) _scrollToBottom();
+      } else {
+        setState(() {
+          _isIncomingAiTyping = false;
+          if (_currentMessages.isNotEmpty) {
+             _currentMessages.last['isIncomingTyping'] = false;
+          }
+        });
+        timer.cancel();
+        _scrollToBottom();
+      }
+    });
+  }
+
+  void _stopIncomingTypewriter() {
+    _incomingTypewriterTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _isIncomingAiTyping = false;
+        if (_currentMessages.isNotEmpty && _currentMessages.last['isIncomingTyping'] == true) {
+           _currentMessages.last['isIncomingTyping'] = false;
+        }
+      });
+    }
+  }
+
+  Future<void> _draftWithAi() async {
+    if (_messageController.text.isEmpty) return;
+    
+    setState(() => _isAiGenerating = true);
+    try {
+      final chatService = ref.read(chatServiceProvider);
+      final aiResult = await chatService.draftMessage(_messageController.text);
+      
+      if (mounted) {
+        setState(() => _isAiGenerating = false);
+        _startTypewriter(aiResult);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isAiGenerating = false);
+      }
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+    
+    final chatService = ref.read(chatServiceProvider);
+
+    setState(() {
+      _currentMessages.add({
+        'sender': 'Me',
+        'message': text,
+        'isMe': true,
+      });
+      _messageController.clear();
+      _isTyping = false;
+    });
+    _scrollToBottom();
+
+    try {
+      await chatService.sendMessage(widget.receiverType, text);
+      
+      if (widget.receiverType == 'ai') {
+        _generateAiResponse(text);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Sync failed: $e")));
+      }
+    }
+  }
+
   @override
   void dispose() {
     if (_instance == this) _instance = null;
     CallController.instance.removeListener(_onCallStateChanged);
     _callTicker?.cancel();
     _messageController.dispose();
+    _scrollController.dispose();
+    _typewriterTimer?.cancel();
     super.dispose();
   }
 
@@ -464,19 +693,28 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             isDark, 
             theme, 
             isDesktop, 
-            "Tanvir Ahmed", 
-            'https://i.pravatar.cc/150?u=detail',
+            widget.chatName, 
+            '',
             onBack: () => Navigator.pop(context),
           ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              children: [
-                _buildMessage(context, 'Hi Tanvir, have you reviewed the latest PR?', false),
-                _buildMessage(context, 'Yes, looking good so far. Just a few tweaks on the UI.', true),
-                _buildMessage(context, 'Great! I will apply those changes tonight.', false),
-              ],
-            ),
+            child: _isLoading 
+              ? const Center(child: CircularProgressIndicator())
+              : ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  itemCount: _currentMessages.length,
+                  itemBuilder: (context, index) {
+                    final msg = _currentMessages[index];
+                    return _buildMessage(
+                      context, 
+                      msg['message'], 
+                      msg['isMe'], 
+                      isTyping: msg['isTyping'] ?? false,
+                      isIncomingTyping: msg['isIncomingTyping'] ?? false,
+                    );
+                  },
+                ),
           ),
           _buildPremiumInputArea(context, isDark, theme),
         ],
@@ -587,7 +825,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             icon: const Icon(Icons.arrow_back_ios_new, size: 18),
             onPressed: onBack ?? () => Navigator.pop(context),
           ),
-          CircleAvatar(radius: 16, backgroundImage: NetworkImage(avatar)),
+          CircleAvatar(
+            radius: 16, 
+            backgroundColor: widget.chatColor.withOpacity(0.2),
+            backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
+            child: avatar.isEmpty ? Icon(widget.receiverType == 'self' ? Icons.person : Icons.auto_awesome, size: 16, color: widget.chatColor) : null,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -664,6 +907,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   Widget _buildPremiumInputArea(BuildContext context, bool isDark, ThemeData theme, {TextEditingController? customController, bool isSmall = false}) {
+    final controller = customController ?? _messageController;
     return Container(
       padding: EdgeInsets.fromLTRB(16, 8, 16, isSmall ? 16 : 30),
       decoration: BoxDecoration(color: Colors.transparent, boxShadow: [BoxShadow(color: isDark ? Colors.black.withOpacity(0.2) : Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))]),
@@ -677,13 +921,40 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(color: isDark ? const Color(0xFF1E222D) : Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08), width: 1)),
               child: Row(children: [
-                Expanded(child: TextField(controller: customController ?? _messageController, maxLines: 5, minLines: 1, onChanged: (val) => setState(() => _isTyping = val.isNotEmpty), style: TextStyle(fontSize: isSmall ? 12 : 13), decoration: InputDecoration(hintText: 'Message...', border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 10)))),
-                IconButton(icon: Icon(Icons.auto_awesome, size: isSmall ? 16 : 18, color: theme.colorScheme.primary.withOpacity(0.8)), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () {}),
+                Expanded(
+                  child: TextField(
+                    controller: controller, 
+                    maxLines: 5, 
+                    minLines: 1, 
+                    onChanged: (val) => setState(() => _isTyping = val.isNotEmpty), 
+                    onSubmitted: (_) { if(customController == null) _sendMessage(); },
+                    style: TextStyle(fontSize: isSmall ? 12 : 13), 
+                    decoration: InputDecoration(
+                      hintText: _isAiGenerating ? 'AI active...' : 'Message...', 
+                      border: InputBorder.none, 
+                      isDense: true, 
+                      contentPadding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 10)
+                    )
+                  )
+                ),
+                if (customController == null)
+                  _isAiGenerating 
+                    ? const Padding(padding: EdgeInsets.all(8.0), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amber)))
+                    : IconButton(icon: Icon(Icons.auto_awesome, size: isSmall ? 16 : 18, color: Colors.amber.withOpacity(0.8)), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: _draftWithAi),
               ]),
             ),
           ),
           const SizedBox(width: 8),
-          GestureDetector(onTap: () {}, child: Container(height: isSmall ? 36 : 40, width: isSmall ? 36 : 40, margin: const EdgeInsets.only(bottom: 4), decoration: BoxDecoration(color: _isTyping ? theme.colorScheme.primary : (isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05)), shape: BoxShape.circle), child: Icon(_isTyping ? Icons.send : Icons.mic_none, size: isSmall ? 16 : 18, color: _isTyping ? Colors.white : (isDark ? Colors.white54 : Colors.black45)))),
+          GestureDetector(
+            onTap: customController == null ? _sendMessage : null, 
+            child: Container(
+              height: isSmall ? 36 : 40, 
+              width: isSmall ? 36 : 40, 
+              margin: const EdgeInsets.only(bottom: 4), 
+              decoration: BoxDecoration(color: _isTyping ? theme.colorScheme.primary : (isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05)), shape: BoxShape.circle), 
+              child: Icon(_isTyping ? Icons.send : Icons.mic_none, size: isSmall ? 16 : 18, color: _isTyping ? Colors.white : (isDark ? Colors.white54 : Colors.black45))
+            )
+          ),
         ],
       ),
     );
@@ -693,10 +964,86 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     return MouseRegion(cursor: SystemMouseCursors.click, child: GestureDetector(onTap: onTap, child: Container(width: 11, height: 11, decoration: BoxDecoration(color: color, shape: BoxShape.circle))));
   }
 
-  Widget _buildMessage(BuildContext context, String text, bool isMe) {
+  Widget _buildMessage(BuildContext context, String text, bool isMe, {bool isTyping = false, bool isIncomingTyping = false}) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    return Align(alignment: isMe ? Alignment.centerRight : Alignment.centerLeft, child: Container(margin: const EdgeInsets.only(bottom: 20), constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), decoration: BoxDecoration(color: isMe ? theme.colorScheme.primary : (isDark ? Colors.white.withOpacity(0.08) : Colors.white), borderRadius: BorderRadius.only(topLeft: const Radius.circular(16), topRight: const Radius.circular(16), bottomLeft: Radius.circular(isMe ? 16 : 0), bottomRight: Radius.circular(isMe ? 0 : 16))), child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [Text(text, style: TextStyle(color: isMe ? Colors.white : (isDark ? Colors.white.withOpacity(0.9) : Colors.black87), fontSize: 13)), const SizedBox(height: 4), Text('10:45 AM', style: TextStyle(color: isMe ? Colors.white60 : Colors.black38, fontSize: 9))])));
+    
+    if (isTyping) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF00E676), Color(0xFF00BCD4), Color(0xFF7C4DFF)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16), bottomRight: Radius.circular(16)),
+            boxShadow: [
+              BoxShadow(color: const Color(0xFF00BCD4).withOpacity(0.3), blurRadius: 15, spreadRadius: 2),
+            ]
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+              SizedBox(width: 12),
+              Text("AI is thinking...", style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft, 
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 20), 
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75), 
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), 
+        decoration: BoxDecoration(
+          color: isMe ? theme.colorScheme.primary : (isDark ? Colors.white.withOpacity(0.08) : Colors.white), 
+          borderRadius: BorderRadius.only(topLeft: const Radius.circular(16), topRight: const Radius.circular(16), bottomLeft: Radius.circular(isMe ? 16 : 0), bottomRight: Radius.circular(isMe ? 0 : 16)),
+          border: isMe ? null : Border.all(color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05))
+        ), 
+        child: Column(
+          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start, 
+          children: [
+            Text(text, style: TextStyle(color: isMe ? Colors.white : (isDark ? Colors.white.withOpacity(0.9) : Colors.black87), fontSize: 13, height: 1.5)), 
+            const SizedBox(height: 6), 
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('10:45 AM', style: TextStyle(color: isMe ? Colors.white60 : Colors.grey, fontSize: 9)),
+                if (isIncomingTyping) ...[
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: _stopIncomingTypewriter,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.redAccent.withOpacity(0.5), width: 0.5),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.stop_circle_outlined, size: 12, color: Colors.redAccent),
+                          SizedBox(width: 4),
+                          Text("Stop Generating", style: TextStyle(color: Colors.redAccent, fontSize: 9, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  )
+                ]
+              ],
+            )
+          ]
+        )
+      )
+    );
   }
 }
 

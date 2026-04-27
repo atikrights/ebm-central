@@ -9,6 +9,8 @@ class GlassCard extends StatelessWidget {
   final double blur;
   final double opacity;
   final BorderRadius borderRadius;
+  final EdgeInsetsGeometry? padding;
+
 
   const GlassCard({
     super.key,
@@ -19,7 +21,9 @@ class GlassCard extends StatelessWidget {
     this.blur = 12.0,
     this.opacity = 0.6,
     this.borderRadius = const BorderRadius.all(Radius.circular(24.0)),
+    this.padding,
   });
+
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +48,8 @@ class GlassCard extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
           child: Container(
-            padding: const EdgeInsets.all(20),
+            padding: padding ?? const EdgeInsets.all(20),
+
             decoration: BoxDecoration(
               color: isDark ? null : Colors.white.withOpacity(0.4),
               borderRadius: borderRadius,

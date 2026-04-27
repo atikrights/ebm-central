@@ -12,7 +12,8 @@ import '../../../core/network/api_service.dart';
 
 class JoinScreen extends ConsumerStatefulWidget {
   final String token;
-  const JoinScreen({super.key, required this.token});
+  final String role;
+  const JoinScreen({super.key, required this.token, required this.role});
 
   @override
   ConsumerState<JoinScreen> createState() => _JoinScreenState();
@@ -24,6 +25,7 @@ class _JoinScreenState extends ConsumerState<JoinScreen>
   bool _isValidating = true;
   bool _isValidToken = false;
   String _tokenEmail = '';
+  String _tokenRole = '';
 
   // Form
   final _nameController = TextEditingController();
@@ -52,6 +54,15 @@ class _JoinScreenState extends ConsumerState<JoinScreen>
   }
 
   Future<void> _validateToken() async {
+    if (widget.token.isEmpty) {
+      setState(() {
+        _isValidating = false;
+        _isValidToken = false;
+        _errorMessage = 'No token provided.';
+      });
+      return;
+    }
+
     setState(() => _isValidating = true);
     
     try {
@@ -64,18 +75,23 @@ class _JoinScreenState extends ConsumerState<JoinScreen>
           _isValidating = false;
           _isValidToken = true;
           _tokenEmail = data['email'] ?? '';
+          _tokenRole = data['role'] ?? 'STAFF';
         });
         _animController.forward();
       }
     } catch (e) {
+      debugPrint('Token Validation Error: $e');
       if (mounted) {
         setState(() {
           _isValidating = false;
           _isValidToken = false;
+          _errorMessage = 'This link is expired or invalid. Please request a new one.';
         });
       }
     }
   }
+
+  String _errorMessage = '';
 
   Future<void> _handleRegister() async {
     final name = _nameController.text.trim();
@@ -328,7 +344,9 @@ class _JoinScreenState extends ConsumerState<JoinScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            'This invitation link is invalid, has already been used, or has expired. Please contact your Super Administrator for a new link.',
+            _errorMessage.isNotEmpty 
+                ? _errorMessage 
+                : 'This invitation link is invalid, has already been used, or has expired. Please contact your Super Administrator for a new link.',
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               fontSize: 13, height: 1.6,
@@ -418,6 +436,19 @@ class _JoinScreenState extends ConsumerState<JoinScreen>
                     style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: isDark ? Colors.white : const Color(0xFF0F172A)),
                   ),
                 ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.greenAccent,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    _tokenRole.toUpperCase(),
+                    style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Tooltip(
                   message: 'Copy email',
                   child: InkWell(

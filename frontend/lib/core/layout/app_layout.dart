@@ -5,11 +5,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:iconsax_plus/iconsax_plus.dart';
+
 import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/projects/presentation/projects_screen.dart';
 import '../../features/finance/presentation/finance_screen.dart';
 import '../../features/departments/presentation/department_screen.dart';
 import '../theme/theme_provider.dart';
+import '../auth/auth_provider.dart';
 import '../../shared/widgets/splash_screen.dart';
 import '../../features/tasks/presentation/tasks_screen.dart';
 import '../../features/team/presentation/team_screen.dart';
@@ -31,7 +34,11 @@ import '../../features/online_geo/presentation/software_zone_screen.dart';
 import '../../features/pay_manager/presentation/pay_manager_screen.dart';
 import '../../features/analysis/presentation/analysis_screens.dart';
 import '../../features/live/presentation/overview_screens.dart';
+import '../../features/mail/presentation/mail_dashboard_screen.dart';
+import '../../features/mail/presentation/mail_settings_screen.dart';
+import '../../features/mail/presentation/mail_automation_screen.dart';
 import 'dart:async';
+
 
 // Global header height constant
 const double kGlobalHeaderHeight = 54.0;
@@ -144,7 +151,11 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     const OverviewEfficiencyScreen(),
     const OverviewBandwidthScreen(),
     const OverviewAuditScreen(),
+    const MailDashboardScreen(),
+    const MailSettingsScreen(),
+    const MailAutomationScreen(),
   ];
+
 
   @override
   Widget build(BuildContext context) {
@@ -454,11 +465,17 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                       const SizedBox(width: 4),
                       _headerIcon(Icons.notifications_outlined, isDark, () {}),
                       const SizedBox(width: 12),
-                      CircleAvatar(
-                        radius: 15,
-                        backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
-                        child: Icon(Icons.person_outline,
-                          color: Theme.of(context).colorScheme.primary, size: 16),
+                      GestureDetector(
+                        onTap: () => _showProfileDropdown(context, isDark),
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: CircleAvatar(
+                            radius: 15,
+                            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                            child: Icon(Icons.person_outline,
+                              color: Theme.of(context).colorScheme.primary, size: 16),
+                          ),
+                        ),
                       ),
                       if (!isDesktop) ...[
                         const SizedBox(width: 12),
@@ -610,7 +627,27 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                   _sidebarItem(3, Icons.business_center, 'Departments', isExpanded, isDark),
                   _sidebarItem(4, Icons.add_circle, 'Add', isExpanded, isDark),
                   _sidebarItem(5, Icons.chat_bubble, 'Chat', isExpanded, isDark),
+                  _buildExpandableSidebarItem(
+                    index: 30,
+                    icon: Icons.mail_outline_rounded,
+                    label: 'Workplace Mail',
+                    isExpanded: isExpanded,
+                    isDark: isDark,
+                    subItems: [
+                      _SubMenuItem(index: 30, label: 'Inbox', icon: Icons.inbox_rounded),
+                      _SubMenuItem(index: 30, label: 'Sent', icon: Icons.send_rounded),
+                      _SubMenuItem(index: 30, label: 'Drafts', icon: Icons.description_rounded),
+                      _SubMenuItem(index: 30, label: 'Trash', icon: Icons.delete_outline_rounded),
+                      _SubMenuItem(index: 30, label: 'Spam', icon: Icons.report_gmailerrorred_rounded),
+                      _SubMenuItem(index: 32, label: 'Mail Automation', icon: Icons.auto_mode_rounded),
+                      _SubMenuItem(index: 31, label: 'Mail Settings', icon: Icons.settings_suggest_outlined),
+                    ],
+
+
+                  ),
+
                   _sidebarItem(6, Icons.person, 'Profile', isExpanded, isDark),
+
                   _buildExpandableSidebarItem(
                     index: 7,
                     icon: Icons.outlined_flag_rounded,
@@ -637,6 +674,19 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                     ],
                   ),
                   _sidebarItem(16, Icons.payments_rounded, 'Pay Manager', isExpanded, isDark),
+                  
+                  // --- SYSTEM SETTINGS ---
+                  _buildExpandableSidebarItem(
+                    index: 6,
+                    icon: Icons.settings_rounded,
+                    label: 'System Settings',
+                    isExpanded: isExpanded,
+                    isDark: isDark,
+                    subItems: [
+                      _SubMenuItem(index: 6, label: 'Account Profile', icon: Icons.person_outline),
+                    ],
+                  ),
+
                 ],
               ),
             ),
@@ -895,7 +945,9 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                 _bottomNavItem(23, Icons.dashboard_customize_rounded, 'Overview', isDark),
                 _bottomNavItem(3, Icons.business_center_rounded, 'Workplace', isDark),
                 _bottomNavItem(5, Icons.chat_bubble_rounded, 'Chat', isDark),
-                _bottomNavItem(2, Icons.auto_awesome_motion_rounded, 'Board', isDark),
+                _bottomNavItem(30, Icons.mail_rounded, 'Mail', isDark),
+
+
             ],
           ),
         ),
@@ -966,6 +1018,237 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return "$minutes:$seconds";
+  }
+
+  void _showProfileDropdown(BuildContext context, bool isDark) {
+    final authState = ref.read(authProvider);
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Profile',
+      barrierColor: Colors.black.withOpacity(0.2),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) {
+        return const SizedBox.shrink();
+      },
+      transitionBuilder: (context, anim1, anim2, child) {
+
+        final curve = Curves.easeOutQuart.transform(anim1.value);
+        return Transform.scale(
+          scale: 0.95 + (0.05 * curve),
+          child: Opacity(
+            opacity: anim1.value,
+            child: Align(
+              alignment: isMobile ? Alignment.center : Alignment.topRight,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  top: isMobile ? 0 : kGlobalHeaderHeight + 10,
+                  right: isMobile ? 0 : 20,
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    width: isMobile ? MediaQuery.of(context).size.width * 0.9 : 320,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E2128) : Colors.white,
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          blurRadius: 40,
+                          offset: const Offset(0, 15),
+                        ),
+                      ],
+                      border: Border.all(
+                        color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // --- Profile Header (Gmail Style) ---
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                          child: Column(
+                            children: [
+                              // Avatar
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    colors: [primaryColor, primaryColor.withOpacity(0.6)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: primaryColor.withOpacity(0.3),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    (authState.name ?? "U")[0].toUpperCase(),
+                                    style: const TextStyle(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              // Name
+                              Text(
+                                authState.name ?? "User Identity",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                              // Email
+                              Text(
+                                authState.email ?? "identity@ebfic.store",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark ? Colors.white54 : Colors.black54,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              // Manage Identity Button
+                              InkWell(
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  setState(() => _currentIndex = 6); // Profile index
+                                },
+                                borderRadius: BorderRadius.circular(100),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(100),
+                                    border: Border.all(
+                                      color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.1),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    "Manage your EBM Identity",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.white70 : Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        Divider(color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05)),
+                        
+                        // --- Dropdown Items ---
+                        _buildDropdownItem(
+                          icon: Icons.person_outline_rounded,
+                          label: "My Profile",
+                          onTap: () {
+                            Navigator.pop(context);
+                            setState(() => _currentIndex = 6);
+                          },
+                          isDark: isDark,
+                        ),
+                        _buildDropdownItem(
+                          icon: Icons.edit_note_rounded,
+                          label: "Edit Identity",
+                          onTap: () => Navigator.pop(context),
+                          isDark: isDark,
+                        ),
+                        _buildDropdownItem(
+                          icon: Icons.settings_outlined,
+                          label: "System Settings",
+                          onTap: () => Navigator.pop(context),
+                          isDark: isDark,
+                        ),
+                        
+                        Divider(color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05)),
+                        
+                        // --- Footer / Logout ---
+                        _buildDropdownItem(
+                          icon: Icons.logout_rounded,
+                          label: "Terminate Session",
+                          onTap: () {
+                            Navigator.pop(context);
+                            ref.read(authProvider.notifier).logout();
+                          },
+                          isDark: isDark,
+                          isDestructive: true,
+                        ),
+                        
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Text(
+                            "Privacy Policy • Terms of Service",
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark ? Colors.white24 : Colors.black26,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDropdownItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    required bool isDark,
+    bool isDestructive = false,
+  }) {
+    final color = isDestructive 
+        ? Colors.redAccent 
+        : (isDark ? Colors.white70 : Colors.black87);
+        
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: color.withOpacity(0.7)),
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -22,8 +22,12 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'uid',
         'phone',
         'current_company_id',
+        'key_1',
+        'key_2',
+        'key_3',
     ];
 
     /**
@@ -34,6 +38,9 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'key_1',  // Security keys must NEVER appear in API responses
+        'key_2',
+        'key_3',
     ];
 
     /**
@@ -55,5 +62,37 @@ class User extends Authenticatable
     public function devices()
     {
         return $this->hasMany(TrustedDevice::class);
+    }
+
+    protected static function booted()
+    {
+        static::creating(function ($user) {
+            if (empty($user->uid)) {
+                $user->uid = self::generateUniqueUid($user->role);
+            }
+        });
+
+        static::updating(function ($user) {
+            // If the role has changed, regenerate the UID to match the new role prefix
+            if ($user->isDirty('role')) {
+                $user->uid = self::generateUniqueUid($user->role);
+            }
+        });
+    }
+    public static function generateUniqueUid($role)
+    {
+        $prefix = match ($role) {
+            'super_admin' => 'SID',
+            'admin'       => 'AID',
+            'manager'     => 'MID',
+            'staff'       => 'TAF',
+            default       => 'UID',
+        };
+
+        do {
+            $uid = $prefix . str_pad(rand(0, 999999), 6, '0', STR_PAD_LEFT);
+        } while (self::where('uid', $uid)->exists());
+
+        return $uid;
     }
 }

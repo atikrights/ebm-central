@@ -153,12 +153,28 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
           // Chat List
           Expanded(
-            child: ListView.builder(
+            child: ListView(
               padding: const EdgeInsets.only(top: 8),
-              itemCount: 15,
-              itemBuilder: (context, index) {
-                return _buildCompactChatTile(context, index, isDark);
-              },
+              children: [
+                _buildOfficialChatTile(
+                  context, 
+                  isDark, 
+                  id: 'self', 
+                  name: 'Notes (You)', 
+                  subtitle: 'Your private encrypted space.', 
+                  icon: Icons.person, 
+                  color: Colors.blue
+                ),
+                _buildOfficialChatTile(
+                  context, 
+                  isDark, 
+                  id: 'ai', 
+                  name: 'AI Assistant', 
+                  subtitle: 'Official EBM Intelligence.', 
+                  icon: Icons.auto_awesome, 
+                  color: Colors.amber
+                ),
+              ],
             ),
           ),
         ],
@@ -239,23 +255,41 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  Widget _buildCompactChatTile(BuildContext context, int chatIndex, bool isDark) {
+  Widget _buildOfficialChatTile(
+    BuildContext context, 
+    bool isDark, {
+    required String id, 
+    required String name, 
+    required String subtitle, 
+    required IconData icon, 
+    required Color color
+  }) {
     final theme = Theme.of(context);
     return InkWell(
       onTap: () {
-        ChatDetailScreen.cleanupChat(context, "Tanvir Ahmed"); 
+        ChatDetailScreen.cleanupChat(context, name); 
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const ChatDetailScreen()),
+          MaterialPageRoute(
+            builder: (context) => ChatDetailScreen(
+              receiverType: id,
+              chatName: name,
+              chatColor: color,
+            ),
+          ),
         );
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: isDark ? Colors.white10 : Colors.black12, width: 0.5)),
+        ),
         child: Row(
           children: [
-            const CircleAvatar(
-              radius: 24,
-              backgroundImage: NetworkImage('https://i.pravatar.cc/150?u=compact'),
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: color.withOpacity(0.15),
+              child: Icon(icon, color: color, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -265,29 +299,37 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Tanvir Ahmed', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: -0.2)),
-                      Text('10:45 AM', style: TextStyle(color: isDark ? Colors.white38 : Colors.black45, fontSize: 11)),
+                      Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: -0.2)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.green.withOpacity(0.3), width: 0.5),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.lock_outline, size: 8, color: Colors.green),
+                            SizedBox(width: 2),
+                            Text('E2EE', style: TextStyle(fontSize: 8, color: Colors.green, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Row(
                     children: [
                       const Icon(Icons.done_all, size: 14, color: Colors.blue),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          'Let us finish the module by tonight.',
+                          subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 13),
+                          style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 12),
                         ),
                       ),
-                      if (chatIndex % 3 == 0)
-                        Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(color: theme.colorScheme.primary, shape: BoxShape.circle),
-                          child: const Text('2', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                        ),
                     ],
                   ),
                 ],

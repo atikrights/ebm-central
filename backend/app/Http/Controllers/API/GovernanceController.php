@@ -18,7 +18,7 @@ class GovernanceController extends Controller
     {
         $request->validate([
             'email' => 'required|email',
-            'role' => 'required|in:super_admin,admin,manager,staff',
+            'role' => 'required|in:admin,manager,staff',
             'allowed_apps' => 'nullable|array',
         ]);
 
@@ -36,9 +36,9 @@ class GovernanceController extends Controller
             'expires_at' => $expiresAt,
         ]);
 
-        // Auto-detect domain for 100% correctness
-        $baseUrl = $request->getSchemeAndHttpHost();
-        $joinLink = $baseUrl . "/join/" . $token;
+        // Use descriptive URL format: /join/role/token
+        $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+        $joinLink = $frontendUrl . "/#/join/" . $request->role . "/" . $token;
 
         return response()->json([
             'message' => 'Invitation generated successfully',
@@ -76,5 +76,65 @@ class GovernanceController extends Controller
     {
         $users = User::with(['companies'])->get();
         return response()->json($users);
+    }
+
+    public function deleteUser($id)
+    {
+        $user = \App\Models\User::find($id);
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        // Prevent deleting own account if needed, but for now allow super admin full control
+        $user->delete();
+
+        return response()->json(['message' => 'User deleted successfully']);
+    }
+
+    public function updateRole(Request $request, $id)
+    {
+        $request->validate([
+            'role' => 'required|in:super_admin,admin,manager,staff'
+        ]);
+
+        $user = \App\Models\User::find($id);
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        if ($user->id === $request->user()->id && $request->role !== 'super_admin') {
+            return response()->json(['message' => 'You cannot downgrade your own super admin role'], 403);
+        }
+
+        $user->role = $request->role;
+        $user->save();
+
+        return response()->json(['message' => 'User role updated successfully', 'user' => $user]);
+    }
+
+    public function updateUser(Request $request, $id)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email,' . $id,
+            'role' => 'required|in:super_admin,admin,manager,staff',
+        ]);
+
+        $user = \App\Models\User::find($id);
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        $user->name = $request->name;
+        $user->email = $request->email;
+        $user->role = $request->role;
+
+        if ($request->has('password') && !empty($request->password)) {
+            $user->password = \Illuminate\Support\Facades\Hash::make($request->password);
+        }
+
+        $user->save();
+
+        return response()->json(['message' => 'User updated successfully', 'user' => $user]);
     }
 }

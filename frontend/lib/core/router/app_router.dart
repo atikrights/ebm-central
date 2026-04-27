@@ -5,6 +5,8 @@ import '../auth/auth_provider.dart';
 import '../layout/app_layout.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/join_screen.dart';
+import '../../features/mail/presentation/mail_dashboard_screen.dart';
+import '../../features/mail/presentation/mail_settings_screen.dart';
 
 // ─────────────────────────────────────────────
 // RouterNotifier — bridges Riverpod auth state → GoRouter refresh
@@ -20,17 +22,24 @@ class RouterNotifier extends ChangeNotifier {
   String? redirect(BuildContext context, GoRouterState state) {
     final authState = _ref.read(authProvider);
     final isLoggedIn = authState.isLoggedIn;
+    
+    // Safety Check: Accessing /join without a token is not allowed
     final isJoinRoute = state.matchedLocation.startsWith('/join/');
-    final isLoginRoute = state.matchedLocation == '/login';
+    final hasToken = state.pathParameters.containsKey('token') && state.pathParameters['token']!.isNotEmpty;
+    final hasRole = state.pathParameters.containsKey('role') && state.pathParameters['role']!.isNotEmpty;
 
-    // Always allow /join/:token (invitation link)
-    if (isJoinRoute) return null;
+    if (isJoinRoute && (!hasToken || !hasRole)) {
+      return '/login'; // Redirect to login if no token or role provided
+    }
+
+    // Always allow /join/:role/:token if it has both
+    if (isJoinRoute && hasToken && hasRole) return null;
 
     // Not logged in → go to login
-    if (!isLoggedIn && !isLoginRoute) return '/login';
+    if (!isLoggedIn && state.matchedLocation != '/login') return '/login';
 
     // Already logged in → don't show login page
-    if (isLoggedIn && isLoginRoute) return '/';
+    if (isLoggedIn && state.matchedLocation == '/login') return '/';
 
     return null;
   }
@@ -60,6 +69,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AppLayout(),
       ),
 
+      // Workplace Mail (protected)
+      GoRoute(
+        path: '/mail',
+        name: 'mail',
+        builder: (context, state) => const MailDashboardScreen(),
+      ),
+
+      // Mail Settings (protected)
+      GoRoute(
+        path: '/mail/settings',
+        name: 'mail_settings',
+        builder: (context, state) => const MailSettingsScreen(),
+      ),
+
       // Login (public)
       GoRoute(
         path: '/login',
@@ -73,15 +96,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
 
-      // Join via invitation token (public deep link)
+      // Join via invitation role and token (public deep link)
       GoRoute(
-        path: '/join/:token',
+        path: '/join/:role/:token',
         name: 'join',
         pageBuilder: (context, state) {
           final token = state.pathParameters['token'] ?? '';
+          final role = state.pathParameters['role'] ?? '';
           return CustomTransitionPage(
             key: state.pageKey,
-            child: JoinScreen(token: token),
+            child: JoinScreen(token: token, role: role),
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },
