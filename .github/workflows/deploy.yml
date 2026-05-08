@@ -28,7 +28,9 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.REMOTE_PORT || 65002 }} # Changed default to 65002
+          port: ${{ secrets.REMOTE_PORT || 65002 }}
+          timeout: 120s # Increased to 2 minutes
+          command_timeout: 20m
           source: "build/web/*"
           target: "public_html/central"
           strip_components: 2
