@@ -15,7 +15,7 @@ jobs:
       - name: 🐦 Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable' # এটি অটোমেটিক লেটেস্ট স্টেবল ভার্সন নিবে
+          channel: 'stable'
           cache: true
       - name: 🏗️ Build Web
         run: |
@@ -28,7 +28,7 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.REMOTE_PORT || 22 }}
+          port: ${{ secrets.REMOTE_PORT || 65002 }} # Changed default to 65002
           source: "build/web/*"
           target: "public_html/central"
           strip_components: 2
