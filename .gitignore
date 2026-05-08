@@ -1,0 +1,75 @@
+# === FLUTTER WEB/APP .gitignore ===
+
+# Flutter/Dart build outputs - generated automatically
+/build/
+/.dart_tool/
+/.flutter-plugins
+/.flutter-plugins-dependencies
+/.packages
+
+# Android specific
+/android/.gradle/
+/android/captures/
+/android/local.properties
+/android/key.properties
+/android/app/google-services.json
+/android/gradle-wrapper.jar
+**/android/**/gradle-wrapper.jar
+**/android/**/*.iml
+
+# iOS specific
+/ios/Pods/
+/ios/Flutter/App.framework
+/ios/Flutter/Flutter.framework
+/ios/Flutter/Flutter.podspec
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/ephemeral/
+/ios/.symlinks/
+/ios/Runner/GeneratedPluginRegistrant.*
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+
+# macOS specific
+/macos/Flutter/GeneratedPluginRegistrant.swift
+/macos/Flutter/ephemeral/
+
+# Windows specific
+/windows/flutter/generated_plugin_registrant.cc
+/windows/flutter/generated_plugin_registrant.h
+/windows/flutter/generated_plugins.cmake
+
+# Linux specific
+/linux/flutter/generated_plugin_registrant.cc
+/linux/flutter/generated_plugin_registrant.h
+/linux/flutter/generated_plugins.cmake
+
+# Web build output
+/web/build/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Environment / Secrets - NEVER commit
+.env
+.env.*
+!.env.example
+lib/core/config.local.dart
+**/secrets.dart
+
+# Dart pub cache
+.pub-cache/
+.pub/
+
+# Test results
+test/reports/
+
+# Dart analysis
+.dart_tool/
+doc/api/

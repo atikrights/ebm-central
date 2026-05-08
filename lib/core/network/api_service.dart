@@ -1,0 +1,173 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+
+// ─── ApiService Provider ───────────────────────────────────────────────────
+final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
+
+/// EBM Central API Service
+/// 
+/// Security Features:
+/// - All requests include 'X-EBM-Client' header for server-side validation.
+/// - Authorization Bearer token is injected on every authenticated request.
+/// - Consistent error handling with typed [ApiException] for the UI layer.
+/// - Production URL detection is automatic based on the current host.
+class ApiService {
+  // ─── Base URL (Auto-detects Production vs Local) ─────────────────────────
+  String get baseUrl {
+    final String host = Uri.base.host;
+    
+    // 1. Local Development
+    if (host == 'localhost' || host == '127.0.0.1' || host.isEmpty) {
+      return 'http://127.0.0.1:8000/api';
+    }
+
+    // 2. Production Subdomain Mapping (Hostinger)
+    // Maps [anything].example.com -> api.example.com
+    final domainParts = host.split('.');
+    if (domainParts.length >= 2) {
+      final rootDomain = domainParts.sublist(domainParts.length - 2).join('.');
+      return 'https://api.$rootDomain/api';
+    }
+
+    // Fallback
+    return 'https://api.ebfic.store/api';
+  }
+
+  String? token;
+
+  void setToken(String newToken) => token = newToken;
+  void clearToken() => token = null;
+
+  // ─── Default Security Headers ─────────────────────────────────────────────
+  // 'X-EBM-Client' lets the backend log which platform made the request.
+  // 'X-Requested-With' prevents CSRF from simple HTML form attacks.
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-EBM-Client': 'ebm-central-flutter',
+        'X-Requested-With': 'XMLHttpRequest',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+
+  // ─── GET ─────────────────────────────────────────────────────────────────
+  Future<dynamic> get(String endpoint) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: _headers,
+      );
+      return _handleResponse(response);
+    } on http.ClientException catch (e) {
+      throw ApiException('Network error: ${e.message}', statusCode: 0);
+    }
+  }
+
+  // ─── POST ─────────────────────────────────────────────────────────────────
+  Future<dynamic> post(String endpoint, Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: _headers,
+        body: json.encode(data),
+      );
+      return _handleResponse(response);
+    } on http.ClientException catch (e) {
+      throw ApiException('Network error: ${e.message}', statusCode: 0);
+    }
+  }
+
+  // ─── PUT ─────────────────────────────────────────────────────────────────
+  Future<dynamic> put(String endpoint, Map<String, dynamic> data) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: _headers,
+        body: json.encode(data),
+      );
+      return _handleResponse(response);
+    } on http.ClientException catch (e) {
+      throw ApiException('Network error: ${e.message}', statusCode: 0);
+    }
+  }
+
+  // ─── DELETE ───────────────────────────────────────────────────────────────
+  Future<dynamic> delete(String endpoint) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: _headers,
+      );
+      return _handleResponse(response);
+    } on http.ClientException catch (e) {
+      throw ApiException('Network error: ${e.message}', statusCode: 0);
+    }
+  }
+
+  // ─── Response Handler ─────────────────────────────────────────────────────
+  dynamic _handleResponse(http.Response response) {
+    final statusCode = response.statusCode;
+    final body = response.body;
+
+    if (statusCode >= 200 && statusCode < 300) {
+      if (body.isEmpty) return null;
+      try {
+        return json.decode(body);
+      } catch (e) {
+        debugPrint('❌ JSON Decode Error (Success Code but Invalid JSON):');
+        debugPrint('Raw Body: $body');
+        throw ApiException('Server returned invalid data format.', statusCode: statusCode);
+      }
+    }
+
+    // Try to extract a backend error message
+    String message = 'Request failed ($statusCode)';
+    try {
+      if (body.isNotEmpty) {
+        final decodedBody = json.decode(body);
+        message = decodedBody['message'] ?? decodedBody['error'] ?? message;
+      }
+    } catch (_) {
+      // If we can't decode the error body, it might be HTML
+      debugPrint('⚠️ Could not decode error response body as JSON. Status: $statusCode');
+      if (body.contains('<html') || body.contains('<?php')) {
+        debugPrint('Raw Error Body (HTML/PHP Detected): ${body.substring(0, body.length > 200 ? 200 : body.length)}...');
+      }
+    }
+
+    if (statusCode == 401) throw ApiException('Unauthorized. Please log in again.', statusCode: 401);
+    if (statusCode == 403) throw ApiException('Access denied: $message', statusCode: 403);
+    if (statusCode == 422) throw ApiException('Validation error: $message', statusCode: 422);
+    if (statusCode == 429) throw ApiException('Too many requests. Please wait.', statusCode: 429);
+    
+    throw ApiException(message, statusCode: statusCode);
+  }
+  // ─── POST MULTIPART ──────────────────────────────────────────────────────
+  Future<dynamic> postMultipart(String endpoint, Map<String, String> fields, List<http.MultipartFile> files) async {
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$endpoint'));
+      request.headers.addAll(_headers);
+      request.headers['Content-Type'] = 'multipart/form-data';
+      request.fields.addAll(fields);
+      request.files.addAll(files);
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      return _handleResponse(response);
+    } on http.ClientException catch (e) {
+      throw ApiException('Network error: ${e.message}', statusCode: 0);
+    }
+  }
+}
+
+// ─── Typed API Exception ──────────────────────────────────────────────────
+class ApiException implements Exception {
+  final String message;
+  final int statusCode;
+
+  const ApiException(this.message, {required this.statusCode});
+
+  @override
+  String toString() => 'ApiException($statusCode): $message';
+}
