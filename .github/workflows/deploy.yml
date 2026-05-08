@@ -1,4 +1,4 @@
-name: 🚀 Deploy EBM Central Web (SSH)
+name: 🚀 Deploy EBM Central Web (SSH) + Multi-Platform Release
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
     types: [ created ]
 
 jobs:
+  # 🌐 ওয়েব ডিপ্লয়মেন্ট (Linux)
   deploy-web:
     runs-on: ubuntu-latest
     steps:
@@ -31,5 +32,56 @@ jobs:
           port: ${{ secrets.REMOTE_PORT || 65002 }}
           timeout: 120s
           source: "build/web/*"
-          target: "domains/ebfic.com/public_html" # Corrected Path
+          target: "domains/ebfic.com/public_html"
           strip_components: 2
+
+  # 🤖 অ্যান্ড্রয়েড এবং উইন্ডোজ বিল্ড (Windows)
+  build-android-windows:
+    name: 🤖 Android & Windows
+    runs-on: windows-latest
+    if: github.event_name == 'release'
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+      - name: 📦 Get Deps
+        run: flutter pub get
+      - name: 🤖 Build APK
+        run: flutter build apk --release --dart-define=API_URL=https://api.ebfic.store
+      - name: 🪟 Build Windows
+        run: flutter build windows --release --dart-define=API_URL=https://api.ebfic.store
+      - name: 📤 Upload
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/windows/x64/runner/Release/*.exe
+
+  # 🍎 আইওএস এবং ম্যাক বিল্ড (macOS)
+  build-ios-macos:
+    name: 🍎 iOS & macOS
+    runs-on: macos-latest
+    if: github.event_name == 'release'
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+      - name: 📦 Get Deps
+        run: flutter pub get
+      - name: 🍎 Build iOS (No Codesign)
+        run: flutter build ios --release --no-codesign --dart-define=API_URL=https://api.ebfic.store
+      - name: 💻 Build macOS
+        run: flutter build macos --release --dart-define=API_URL=https://api.ebfic.store
+      - name: 📤 Upload
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/macos/Build/Products/Release/*.app
