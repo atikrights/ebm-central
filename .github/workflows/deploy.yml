@@ -15,8 +15,8 @@ jobs:
       - name: 🐦 Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.0'
-          channel: 'stable'
+          channel: 'stable' # এটি অটোমেটিক লেটেস্ট স্টেবল ভার্সন নিবে
+          cache: true
       - name: 🏗️ Build Web
         run: |
           flutter pub get
@@ -26,8 +26,8 @@ jobs:
         with:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
-          password: ${{ secrets.SSH_PASSWORD }} # Try password first
-          key: ${{ secrets.SSH_PRIVATE_KEY }}   # Try key if exists
+          password: ${{ secrets.SSH_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.REMOTE_PORT || 22 }}
           source: "build/web/*"
           target: "public_html/central"
