@@ -72,28 +72,30 @@ jobs:
       - name: 📤 Upload to Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           files: release_assets/*
-          name: EBM Central Update ${{ github.ref_name }}
+          name: "EBM Central Update ${{ github.ref_name }}"
           body: |
-            🚀 **EBM Central Official Release**
+            🚀 **EBM Central Official Release — ${{ github.ref_name }}**
             
-            ### 📝 What's New in this Update:
-            - Auto-generated changelogs and stability improvements.
-            - Cross-platform syncing via secure API architecture.
+            ### 📝 What's New:
+            - Latest updates, stability improvements & performance boosts.
+            - Cross-platform sync via secure HTTPS API architecture.
             
-            ### 📥 Installation Instructions:
-            **Android Users:**
-            1. Download the `.apk` file below.
-            2. Open the file and select "Install" (Allow installation from unknown sources if prompted).
-            3. For Google Play, use the provided `.aab` file.
+            ### 📥 Installation Guide:
+            **🤖 Android Users:**
+            1. Download the `app-release.apk` file below.
+            2. Open it and tap **Install** (enable "Unknown Sources" if prompted).
+            3. The `.aab` file is for Google Play Store uploads only.
             
-            **Windows PC Users:**
-            1. Download the `.exe` file below.
-            2. Double-click to run the setup and launch EBM Central.
+            **🖥️ Windows PC Users:**
+            1. Download `EBM_Central_Windows.zip` below.
+            2. Extract/Unzip the folder anywhere on your PC.
+            3. Open the extracted folder and run the `.exe` file inside.
             
             ---
             👨‍💻 **Developed & Architected by: Atik Islam**
-            *EBM Ecosystem Master CI/CD Pipeline*
+            *EBM Ecosystem — Enterprise CI/CD Pipeline*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -119,9 +121,10 @@ jobs:
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath release_assets\EBM_Central_Windows.zip
         shell: powershell
 
-      - name: 📤 Upload to Release
+      - name: 📤 Upload Windows ZIP to Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           files: release_assets/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
