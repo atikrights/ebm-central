@@ -113,16 +113,15 @@ jobs:
           flutter pub get
           flutter build windows --release --dart-define=API_URL=https://api.ebfic.store
       
-      - name: 📂 Force Collect Windows
+      - name: 📂 Package Windows Build
         run: |
           mkdir release_assets
-          dir /s /b *.exe > exe_list.txt
-          for /f "delims=" %%i in (exe_list.txt) do copy "%%i" release_assets\
-        shell: cmd
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath release_assets\EBM_Central_Windows.zip
+        shell: powershell
 
       - name: 📤 Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: release_assets/*.exe
+          files: release_assets/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
