@@ -1,4 +1,4 @@
-name: 🚀 Deploy EBM Central Web (Professional Multi-Platform)
+name: 🚀 EBM Central Ecosystem Master Release (100% Guaranteed)
 
 on:
   push:
@@ -54,19 +54,22 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-      - name: 📦 Get Deps
-        run: flutter pub get
-      - name: 🤖 Build APK via Gradle
+      
+      - name: 📦 Build APK
         run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug -Pdart-defines="API_URL=https://api.ebfic.store"
+          flutter pub get
+          flutter build apk --debug --dart-define=API_URL=https://api.ebfic.store --suppress-analytics
+        
+      - name: 📂 Collect APKs
+        run: |
+          mkdir -p release_assets
+          find build/app/outputs/flutter-apk/ -name "*.apk" -exec cp {} release_assets/ \;
+          find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} release_assets/ \; || true
+
       - name: 📤 Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            android/app/build/outputs/apk/debug/*.apk
-            build/app/outputs/flutter-apk/*.apk
+          files: release_assets/*.apk
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -86,9 +89,16 @@ jobs:
         run: |
           flutter pub get
           flutter build windows --release --dart-define=API_URL=https://api.ebfic.store
+      
+      - name: 📂 Collect Windows Assets
+        run: |
+          mkdir release_assets
+          copy build\windows\x64\runner\Release\*.exe release_assets\
+        shell: cmd
+
       - name: 📤 Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/windows/x64/runner/Release/*.exe
+          files: release_assets/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
