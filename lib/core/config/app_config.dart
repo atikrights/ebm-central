@@ -4,31 +4,34 @@ import 'package:flutter/foundation.dart';
 class AppConfig {
   /// Base API URL (e.g., https://api.ebfic.store/api)
   static String get baseUrl {
-    // 1. Check if defined via --dart-define during build
     const definedUrl = String.fromEnvironment('API_URL');
     if (definedUrl.isNotEmpty) {
       return definedUrl.endsWith('/api') ? definedUrl : '$definedUrl/api';
     }
-
-    // 2. Fallback to production if in release mode
     if (kReleaseMode) {
       return 'https://api.ebfic.store/api';
     }
-
-    // 3. Local development fallback
     return 'http://127.0.0.1:8000/api';
   }
 
   /// Base Domain for WebSockets and Assets (e.g., api.ebfic.store)
   static String get baseDomain {
-    final uri = Uri.parse(baseUrl);
-    return uri.host;
+    try {
+      final uri = Uri.parse(baseUrl);
+      return uri.host;
+    } catch (_) {
+      return 'api.ebfic.store';
+    }
   }
 
   /// Origin for CORS checks (e.g., https://api.ebfic.store)
   static String get origin {
-    final uri = Uri.parse(baseUrl);
-    return '${uri.scheme}://${uri.host}';
+    try {
+      final uri = Uri.parse(baseUrl);
+      return '${uri.scheme}://${uri.host}';
+    } catch (_) {
+      return 'https://api.ebfic.store';
+    }
   }
 
   /// Check if running on localhost
@@ -42,10 +45,14 @@ class AppConfig {
   /// Helper for generating asset links
   static String assetLink(String assetId) => '$baseUrl/assets/$assetId/view';
 
+  /// Helper for generating shared asset links (User suggested path)
+  static String sharedLink(String assetId) => '$baseUrl/assets/$assetId/share';
+
   /// Pusher Configuration
   static const String pusherKey = "194c83322db5de281baf";
   static const String pusherCluster = "ap2";
 
-  // Backward compatibility instance (deprecated but kept to prevent breakages)
-  static final AppConfig instance = AppConfig();
+  /// Singleton instance for backward compatibility
+  static final AppConfig instance = AppConfig._internal();
+  AppConfig._internal();
 }

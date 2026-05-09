@@ -980,7 +980,7 @@ class _AssetLibraryScreenState extends ConsumerState<AssetLibraryScreen> {
 
     // ✅ Unified Universal Link
     final String liveLink = 'asset://${asset.id}';
-    final String sharedLink = AppConfig.instance.sharedLink(asset.id);
+    final String sharedLink = AppConfig.sharedLink(asset.id);
 
     showModalBottomSheet(
       context: context,
