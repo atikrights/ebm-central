@@ -15,7 +15,7 @@ class AppConfig {
     if (kIsWeb) {
       final host = html.window.location.hostname;
       // If we are on any subdomain of ebfic.store (central, app, etc.)
-      if (host.contains('ebfic.store')) {
+      if (host != null && host.contains('ebfic.store')) {
         return 'https://api.ebfic.store/api';
       }
       if (host == 'localhost' || host == '127.0.0.1') {
