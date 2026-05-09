@@ -12,11 +12,13 @@ class AppConfig {
 
     // 2. Web Smart Detection (Universal implementation)
     if (kIsWeb) {
-      final host = Uri.base.host;
-      if (host.contains('ebfic.store')) {
+      final host = Uri.base.host.toLowerCase();
+      // If we are on ebfic.store domains, ALWAYS use production API
+      if (host.endsWith('ebfic.store')) {
         return 'https://api.ebfic.store/api';
       }
-      if (host == 'localhost' || host == '127.0.0.1') {
+      // Only use localhost if we are literally on localhost/127.0.0.1 in the browser
+      if (host == 'localhost' || host == '127.0.0.1' || host.startsWith('192.168.')) {
         return 'http://127.0.0.1:8000/api';
       }
     }
