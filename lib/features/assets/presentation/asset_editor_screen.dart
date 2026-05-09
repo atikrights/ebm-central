@@ -75,7 +75,7 @@ class _AssetEditorScreenState extends ConsumerState<AssetEditorScreen> {
       );
     } else if (!kIsWeb) {
       editor = ProImageEditor.file(
-        File(widget.asset.path),
+        File(widget.asset.path) as dynamic,
         callbacks: ProImageEditorCallbacks(
           onImageEditingComplete: (Uint8List bytes) async {
             await _handleImageEdited(bytes);

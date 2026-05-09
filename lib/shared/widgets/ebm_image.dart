@@ -43,7 +43,7 @@ class EbmImage extends ConsumerWidget {
       final file = File(source);
       if (file.existsSync()) {
         return Image.file(
-          file,
+          file as dynamic,
           width: width,
           height: height,
           fit: fit,
@@ -75,7 +75,7 @@ class EbmImage extends ConsumerWidget {
           final localFile = File(asset.path);
           if (localFile.existsSync()) {
             return Image.file(
-              localFile,
+              localFile as dynamic,
               width: width,
               height: height,
               fit: fit,
