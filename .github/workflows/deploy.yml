@@ -7,6 +7,9 @@ on:
   release:
     types: [ created ]
 
+permissions:
+  contents: write
+
 jobs:
   # 🌐 ওয়েব ডিপ্লয়মেন্ট
   deploy-web:
@@ -51,7 +54,7 @@ jobs:
           cache: true
       - name: 📦 Get Deps
         run: flutter pub get
-      - name: 🤖 Build APK (Unsigned)
+      - name: 🤖 Build APK (Debug/Unsigned)
         run: flutter build apk --debug --dart-define=API_URL=https://api.ebfic.store
       - name: 🪟 Build Windows
         run: flutter build windows --release --dart-define=API_URL=https://api.ebfic.store
@@ -59,5 +62,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/app/outputs/flutter-apk/app-debug.apk
+            build/app/outputs/flutter-apk/*.apk
             build/windows/x64/runner/Release/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
