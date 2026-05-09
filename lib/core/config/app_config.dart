@@ -35,6 +35,11 @@ class AppConfig {
     return '${uri.scheme}://${uri.host}';
   }
 
+  /// Check if running on localhost
+  bool get isLocalhost {
+    return baseUrl.contains('127.0.0.1') || baseUrl.contains('localhost');
+  }
+
   /// Broadcasting Auth Endpoint
   static String get authEndpoint => '$baseUrl/broadcasting/auth';
 
