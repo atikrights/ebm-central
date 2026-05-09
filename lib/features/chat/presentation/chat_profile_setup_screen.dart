@@ -12,7 +12,7 @@ class ChatProfileSetupScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatProfileSetupScreenState extends ConsumerState<ChatProfileSetupScreen> {
-  final ChatService _chatService = ChatService(baseUrl: 'http://localhost:8000/api');
+  // final ChatService _chatService = ChatService(baseUrl: 'http://localhost:8000/api'); // REMOVED HARDCODED URL
   final TextEditingController _nameController = TextEditingController();
   String _fullChatId = "...";
   bool _isLoading = true;
@@ -28,6 +28,8 @@ class _ChatProfileSetupScreenState extends ConsumerState<ChatProfileSetupScreen>
 
   Future<void> _loadInitialData() async {
     final authState = ref.read(authProvider);
+    final chatService = ref.read(chatServiceProvider); // Use provider
+    
     if (authState.chatProfileId != null && authState.chatProfileId!.isNotEmpty) {
       setState(() {
         _fullChatId = authState.chatProfileId!;
@@ -36,7 +38,7 @@ class _ChatProfileSetupScreenState extends ConsumerState<ChatProfileSetupScreen>
     }
 
     try {
-      final data = await _chatService.getProfile();
+      final data = await chatService.getProfile();
       if (mounted) {
         setState(() {
           _fullChatId = data['chat_profile_id'] ?? _fullChatId;
@@ -49,11 +51,24 @@ class _ChatProfileSetupScreenState extends ConsumerState<ChatProfileSetupScreen>
         );
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _error = e.toString().replaceFirst('Exception: ', '');
+          _isLoading = false;
+        });
+        
+        // If it's a session error, show message but don't crash
+        if (_error!.contains('Session expired')) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(_error!), backgroundColor: Colors.redAccent),
+          );
+        }
+      }
     }
   }
 
   Future<void> _handleSetup() async {
+    final chatService = ref.read(chatServiceProvider); // Use provider
     if (_nameController.text.trim().isEmpty) {
       setState(() => _error = "Please enter your name.");
       return;

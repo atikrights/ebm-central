@@ -31,6 +31,11 @@ class ChatService {
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
+    } else if (response.statusCode == 401) {
+      // Token is invalid/expired - clear and notify
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('auth_token');
+      throw Exception('Session expired. Please logout and login again.');
     } else {
       throw Exception('Failed to load profile: ${response.statusCode}');
     }

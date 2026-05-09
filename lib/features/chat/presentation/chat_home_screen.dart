@@ -4,24 +4,29 @@ import 'dart:ui';
 import 'chat_models.dart';
 import 'chat_service.dart';
 
-class ChatHomeScreen extends StatefulWidget {
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+class ChatHomeScreen extends ConsumerStatefulWidget {
   @override
-  _ChatHomeScreenState createState() => _ChatHomeScreenState();
+  ConsumerState<ChatHomeScreen> createState() => _ChatHomeScreenState();
 }
 
-class _ChatHomeScreenState extends State<ChatHomeScreen> {
-  final ChatService _chatService = ChatService(baseUrl: 'http://localhost:8000/api');
+class _ChatHomeScreenState extends ConsumerState<ChatHomeScreen> {
+  // final ChatService _chatService = ChatService(baseUrl: 'http://localhost:8000/api'); // REMOVED
   List<Conversation> _conversations = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadConversations();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadConversations();
+    });
   }
 
   Future<void> _loadConversations() async {
-    final convs = await _chatService.getConversations();
+    final chatService = ref.read(chatServiceProvider);
+    final convs = await chatService.getConversations();
     setState(() {
       _conversations = convs;
       _isLoading = false;

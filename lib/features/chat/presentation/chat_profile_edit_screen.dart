@@ -13,7 +13,7 @@ class ChatProfileEditScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatProfileEditScreenState extends ConsumerState<ChatProfileEditScreen> {
-  late ChatService _chatService;
+  // late ChatService _chatService; // MOVED TO LOCAL
   late TextEditingController _nicknameController;
   late TextEditingController _bioController;
   late TextEditingController _aboutController;
@@ -23,7 +23,7 @@ class _ChatProfileEditScreenState extends ConsumerState<ChatProfileEditScreen> {
   @override
   void initState() {
     super.initState();
-    _chatService    = ChatService(baseUrl: 'http://localhost:8000/api');
+    // _chatService    = ChatService(baseUrl: 'http://localhost:8000/api'); // REMOVED
     final authState = ref.read(authProvider);
     _nicknameController = TextEditingController(text: authState.chatNickname);
     _bioController      = TextEditingController(text: authState.chatBio);
@@ -39,6 +39,7 @@ class _ChatProfileEditScreenState extends ConsumerState<ChatProfileEditScreen> {
   }
 
   Future<void> _handleSave() async {
+    final chatService = ref.read(chatServiceProvider); // Use provider
     if (_nicknameController.text.trim().isEmpty) {
       setState(() => _error = 'Nickname cannot be empty.');
       return;
@@ -47,7 +48,7 @@ class _ChatProfileEditScreenState extends ConsumerState<ChatProfileEditScreen> {
     setState(() { _isLoading = true; _error = null; });
 
     try {
-      final response = await _chatService.updateProfile(
+      final response = await chatService.updateProfile(
         nickname: _nicknameController.text.trim(),
         bio: _bioController.text.trim(),
         about: _aboutController.text.trim(),
