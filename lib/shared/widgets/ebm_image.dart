@@ -36,7 +36,7 @@ class EbmImage extends ConsumerWidget {
     if (source.isEmpty) return _error();
 
     // 1. Check if it's a direct web URL (not on our domain)
-    if (source.startsWith('http') && !source.contains(AppConfig.instance.origin)) {
+    if (source.startsWith('http') && !source.contains(AppConfig.origin)) {
       return _networkImage(source);
     }
 
@@ -77,7 +77,7 @@ class EbmImage extends ConsumerWidget {
         }
         
         // Fallback to AppConfig generated link
-        return _networkImage(AppConfig.instance.assetLink(asset.id));
+        return _networkImage(AppConfig.assetLink(asset.id));
       }
     }
 

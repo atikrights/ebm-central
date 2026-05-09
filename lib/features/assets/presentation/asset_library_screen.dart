@@ -1133,7 +1133,7 @@ class _AssetLibraryScreenState extends ConsumerState<AssetLibraryScreen> {
 
               // Live Link (AppConfig auto-domain)
               _buildDetailField(
-                'Live Link  •  ${AppConfig.instance.isLocalhost ? "🟡 Localhost (dev)" : "🟢 Production"}',
+                'Live Link  •  ${AppConfig.isLocalhost ? "🟡 Localhost (dev)" : "🟢 Production"}',
                 _buildCopyRow(liveLink, isDark, IconsaxPlusLinear.link),
                 isDark,
               ),

@@ -2,10 +2,6 @@ import 'package:flutter/foundation.dart';
 
 /// EBM Global Configuration Management
 class AppConfig {
-  // Singleton pattern for backward compatibility
-  static final AppConfig instance = AppConfig._internal();
-  AppConfig._internal();
-
   /// Base API URL (e.g., https://api.ebfic.store/api)
   static String get baseUrl {
     // 1. Check if defined via --dart-define during build
@@ -30,13 +26,13 @@ class AppConfig {
   }
 
   /// Origin for CORS checks (e.g., https://api.ebfic.store)
-  String get origin {
+  static String get origin {
     final uri = Uri.parse(baseUrl);
     return '${uri.scheme}://${uri.host}';
   }
 
   /// Check if running on localhost
-  bool get isLocalhost {
+  static bool get isLocalhost {
     return baseUrl.contains('127.0.0.1') || baseUrl.contains('localhost');
   }
 
@@ -44,9 +40,12 @@ class AppConfig {
   static String get authEndpoint => '$baseUrl/broadcasting/auth';
 
   /// Helper for generating asset links
-  String assetLink(String assetId) => '$baseUrl/assets/$assetId/view';
+  static String assetLink(String assetId) => '$baseUrl/assets/$assetId/view';
 
   /// Pusher Configuration
   static const String pusherKey = "194c83322db5de281baf";
   static const String pusherCluster = "ap2";
+
+  // Backward compatibility instance (deprecated but kept to prevent breakages)
+  static final AppConfig instance = AppConfig();
 }
