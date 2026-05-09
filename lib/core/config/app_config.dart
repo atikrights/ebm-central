@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
 /// EBM Global Configuration Management
@@ -48,6 +49,12 @@ class AppConfig {
   }
 
   static String get authEndpoint => '$baseUrl/broadcasting/auth';
+
+  /// Helper for generating asset links
+  static String assetLink(String assetId) => '$baseUrl/assets/$assetId/view';
+
+  /// Helper for generating shared asset links
+  static String sharedLink(String assetId) => '$baseUrl/assets/$assetId/share';
 
   static const String pusherKey = "194c83322db5de281baf";
   static const String pusherCluster = "ap2";

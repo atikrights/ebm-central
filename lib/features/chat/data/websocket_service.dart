@@ -53,6 +53,11 @@ class WebSocketService {
     }
 
     try {
+      // Small delay for Windows to ensure native plugin is ready
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
       await pusher.init(
         apiKey: AppConfig.pusherKey,
         cluster: AppConfig.pusherCluster, 
