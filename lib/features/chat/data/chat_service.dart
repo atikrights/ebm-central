@@ -27,7 +27,7 @@ class ChatService {
     final response = await http.get(
       Uri.parse('$baseUrl/chat/profile'),
       headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    );
+    ).timeout(const Duration(seconds: 10));
     return jsonDecode(response.body);
   }
 
@@ -95,7 +95,7 @@ class ChatService {
     final response = await http.get(
       Uri.parse('$baseUrl/dm/conversations'),
       headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    );
+    ).timeout(const Duration(seconds: 10));
     if (response.statusCode == 200) {
       List data = jsonDecode(response.body);
       return data.map((e) => Conversation.fromJson(e)).toList();
@@ -210,13 +210,12 @@ class ChatService {
     }
     
     // Self / AI chat: GET /api/chats?receiver_type=self|ai
-    // Backend Chat model returns: {id, user_id, receiver_type, message, is_ai, created_at}
-    // Transform to format expected by _buildMessage: {message, isMe, sender, created_at}
     final token = await _getToken();
     final response = await http.get(
       Uri.parse('$baseUrl/chats?receiver_type=$receiverType'),
       headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    );
+    ).timeout(const Duration(seconds: 10));
+
     if (response.statusCode == 200) {
       final List data = jsonDecode(response.body);
       return data.map<Map<String, dynamic>>((item) {
