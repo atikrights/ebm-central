@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:universal_html/html.dart' as html;
 import '../../../core/auth/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -35,6 +35,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     _slideAnim = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
         .animate(CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic));
     _animController.forward();
+
+    // ── EBM Identity Vault Integration ──
+    if (kIsWeb) {
+      html.window.onMessage.listen((event) {
+        final data = event.data;
+        if (data is Map && data['type'] == 'EBM_EXTENSION_AUTOFILL') {
+          final payload = data['payload'];
+          if (payload != null) {
+            setState(() {
+              _emailController.text = payload['email'] ?? '';
+              _passwordController.text = payload['password'] ?? '';
+            });
+            if (data['autoSubmit'] == true) {
+              _handleLogin();
+            }
+          }
+        }
+      });
+    }
   }
 
   @override
@@ -55,7 +74,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       password: password,
     );
 
-    // Navigation handled by GoRouter redirect based on auth state
+    if (ref.read(authProvider).isLoggedIn && kIsWeb) {
+      // Trigger Vault to save credentials after successful login
+      html.window.postMessage({
+        'type': 'EBM_TRIGGER_SAVE',
+        'payload': {
+          'email': email,
+          'password': password,
+          'timestamp': DateTime.now().toIso8601String(),
+        }
+      }, html.window.location.origin ?? '*');
+    }
   }
 
   @override
@@ -63,7 +92,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final authState = ref.watch(authProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Listen for errors and show snackbar
     ref.listen<AuthState>(authProvider, (AuthState? prev, AuthState next) {
       if (next.error != null && next.error!.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -84,7 +112,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         );
       }
       if (next.isLoggedIn) {
-        // Handle SSO redirection if present
         final redirectPath = GoRouterState.of(context).uri.queryParameters['redirect'];
         if (redirectPath != null && redirectPath.isNotEmpty) {
           context.go(redirectPath);
@@ -97,10 +124,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // ── Animated Background ───────────────────
           _buildBackground(isDark),
-
-          // ── Center Content ────────────────────────
           Center(
             child: SingleChildScrollView(
               child: FadeTransition(
@@ -118,12 +142,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ),
             ),
           ),
-
         ],
       ),
     );
   }
-
 
   Widget _buildBackground(bool isDark) {
     return Container(
@@ -138,7 +160,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ),
       child: Stack(
         children: [
-          // Glow blobs
           Positioned(
             top: -120, right: -80,
             child: Container(
@@ -202,7 +223,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Logo / Brand
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -228,8 +248,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 ],
               ),
               const SizedBox(height: 28),
-
-              // Title
               Text(
                 'EBM Central',
                 textAlign: TextAlign.center,
@@ -252,8 +270,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 ),
               ),
               const SizedBox(height: 36),
-
-              // Email
               _buildField(
                 controller: _emailController,
                 label: 'Email Address',
@@ -263,8 +279,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 16),
-
-              // Password
               _buildField(
                 controller: _passwordController,
                 label: 'Password',
@@ -283,8 +297,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 onSubmitted: (_) => _handleLogin(),
               ),
               const SizedBox(height: 32),
-
-              // Login Button
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 height: 54,
@@ -334,8 +346,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 ),
               ),
               const SizedBox(height: 24),
-
-              // Admin only notice
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
