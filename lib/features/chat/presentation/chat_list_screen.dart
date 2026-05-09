@@ -165,20 +165,32 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   }
 
   Future<void> _loadConversations() async {
-    final service = ref.read(chatServiceProvider);
-    final convs = await service.getConversations();
-    
-    // Also fetch last messages for AI and Self for the "Official" tiles
-    final aiMsgs = await service.getChats('ai');
-    final selfMsgs = await service.getChats('self');
+    try {
+      final service = ref.read(chatServiceProvider);
+      
+      // Parallel loading for faster UI response
+      final results = await Future.wait([
+        service.getConversations().timeout(const Duration(seconds: 10)),
+        service.getChats('ai').timeout(const Duration(seconds: 10)),
+        service.getChats('self').timeout(const Duration(seconds: 10)),
+      ]);
 
-    if (mounted) {
-      setState(() {
-        _conversations = convs;
-        if (aiMsgs.isNotEmpty) _aiLastMsg = aiMsgs.last;
-        if (selfMsgs.isNotEmpty) _selfLastMsg = selfMsgs.last;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _conversations = results[0] as List<Conversation>;
+          final aiMsgs = results[1] as List<Map<String, dynamic>>;
+          final selfMsgs = results[2] as List<Map<String, dynamic>>;
+          
+          if (aiMsgs.isNotEmpty) _aiLastMsg = aiMsgs.last;
+          if (selfMsgs.isNotEmpty) _selfLastMsg = selfMsgs.last;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Load Conversations Error: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
