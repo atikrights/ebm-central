@@ -88,10 +88,17 @@ class _ChatProfileSetupScreenState extends ConsumerState<ChatProfileSetupScreen>
           number: response['chat_number'],
           nickname: _nameController.text.trim()
         );
-        if (mounted) Navigator.of(context).pop(true);
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.of(context).pop(true);
+        }
       } else {
         setState(() {
-          _error = response['error'] ?? "Failed to activate profile.";
+          var backendError = response['error'];
+          if (backendError is Map) {
+            _error = backendError.values.first[0].toString();
+          } else {
+            _error = backendError?.toString() ?? "Failed to activate profile.";
+          }
           _isLoading = false;
         });
       }

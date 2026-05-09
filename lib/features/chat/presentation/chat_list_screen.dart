@@ -44,17 +44,12 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
       if (mounted) {
         setState(() {
-          // Force setup if nickname is missing (Just like mobile app)
-          final isSetup = (profile['is_setup'] == true);
-          final hasNickname = (profile['chat_nickname'] != null && profile['chat_nickname'].toString().isNotEmpty);
-          _isProfileSetup = isSetup && hasNickname;
+          _isLoading = false;
         });
         
-        if (_isProfileSetup) {
+        if (profile['chat_nickname'] != null && profile['chat_nickname'].toString().isNotEmpty) {
           await _loadConversations();
           _initWebSocket();
-        } else {
-          setState(() => _isLoading = false);
         }
       }
     } catch (e) {
@@ -204,6 +199,16 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    ref.listen(authProvider, (previous, next) {
+      final wasSetup = previous?.chatNickname != null && previous!.chatNickname!.isNotEmpty;
+      final isSetup = next.chatNickname != null && next.chatNickname!.isNotEmpty;
+      
+      if (!wasSetup && isSetup) {
+        _loadConversations();
+        _initWebSocket();
+      }
+    });
+
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.transparent,
@@ -211,7 +216,10 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       );
     }
 
-    if (!_isProfileSetup) {
+    final auth = ref.watch(authProvider);
+    final hasNickname = auth.chatNickname != null && auth.chatNickname!.isNotEmpty;
+
+    if (!hasNickname && !_isLoading) {
       return ChatProfileSetupScreen();
     }
 
