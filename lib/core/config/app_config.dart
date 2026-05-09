@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'dart:html' as html;
 
 /// EBM Global Configuration Management
 class AppConfig {
@@ -11,11 +10,10 @@ class AppConfig {
       return definedUrl.endsWith('/api') ? definedUrl : '$definedUrl/api';
     }
 
-    // 2. Web Smart Detection (Check current browser origin)
+    // 2. Web Smart Detection (Universal implementation)
     if (kIsWeb) {
-      final host = html.window.location.hostname;
-      // If we are on any subdomain of ebfic.store (central, app, etc.)
-      if (host != null && host.contains('ebfic.store')) {
+      final host = Uri.base.host;
+      if (host.contains('ebfic.store')) {
         return 'https://api.ebfic.store/api';
       }
       if (host == 'localhost' || host == '127.0.0.1') {
