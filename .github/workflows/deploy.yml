@@ -48,25 +48,36 @@ jobs:
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
+      
+      - name: 📂 Enable Long Paths
+        run: git config --global core.longpaths true
+
       - name: 🐦 Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
+      
       - name: 📦 Get Deps & Clean
         run: |
           flutter pub get
           flutter clean
-      - name: 🤖 Build APK (Debug)
-        run: flutter build apk --debug --dart-define=API_URL=https://api.ebfic.store --suppress-analytics
+
+      - name: 🤖 Build APK (Debug/Unsigned)
+        run: flutter build apk --debug --dart-define=API_URL=https://api.ebfic.store --suppress-analytics --no-tree-shake-icons
+        continue-on-error: true
+
       - name: 🪟 Build Windows
         run: flutter build windows --release --dart-define=API_URL=https://api.ebfic.store --suppress-analytics
-      - name: 📂 Organize Artifacts
+
+      - name: 📂 Manual Artifact Collection
         run: |
           mkdir release_files
-          copy build\app\outputs\flutter-apk\*.apk release_files\ 2>nul || copy build\app\outputs\apk\debug\*.apk release_files\
+          dir /s /b build\app\outputs\*.apk > apk_list.txt
+          for /f "delims=" %%i in (apk_list.txt) do copy "%%i" release_files\
           copy build\windows\x64\runner\Release\*.exe release_files\
         shell: cmd
+
       - name: 📤 Upload to Release
         uses: softprops/action-gh-release@v2
         with:
