@@ -3,11 +3,12 @@ name: 🚀 Deploy EBM Central Web (SSH) + Multi-Platform Release
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   release:
     types: [ created ]
 
 jobs:
-  # 🌐 ওয়েব ডিপ্লয়মেন্ট (Linux)
+  # 🌐 ওয়েব ডিপ্লয়মেন্ট
   deploy-web:
     runs-on: ubuntu-latest
     steps:
@@ -35,11 +36,11 @@ jobs:
           target: "domains/ebfic.com/public_html"
           strip_components: 2
 
-  # 🤖 অ্যান্ড্রয়েড এবং উইন্ডোজ বিল্ড (Windows)
+  # 🤖 অ্যান্ড্রয়েড এবং উইন্ডোজ বিল্ড
   build-android-windows:
     name: 🤖 Android & Windows
     runs-on: windows-latest
-    if: github.event_name == 'release'
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
@@ -61,11 +62,11 @@ jobs:
             build/app/outputs/flutter-apk/app-release.apk
             build/windows/x64/runner/Release/*.exe
 
-  # 🍎 আইওএস এবং ম্যাক বিল্ড (macOS)
+  # 🍎 আইওএস এবং ম্যাক বিল্ড
   build-ios-macos:
     name: 🍎 iOS & macOS
     runs-on: macos-latest
-    if: github.event_name == 'release'
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
