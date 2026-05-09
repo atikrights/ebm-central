@@ -38,14 +38,16 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       // Update Auth State with fetched profile info if needed
       final authNotifier = ref.read(authProvider.notifier);
       authNotifier.updateChatInfo(
-        id: profile['chat_profile_id'],
-        nickname: profile['chat_nickname'],
+        id: profile['chat_profile_id']?.toString() ?? '',
+        nickname: profile['chat_nickname']?.toString() ?? '',
       );
 
       if (mounted) {
         setState(() {
           // Force setup if nickname is missing (Just like mobile app)
-          _isProfileSetup = (profile['is_setup'] ?? false) && (profile['chat_nickname'] != null && profile['chat_nickname'].isNotEmpty);
+          final isSetup = (profile['is_setup'] == true);
+          final hasNickname = (profile['chat_nickname'] != null && profile['chat_nickname'].toString().isNotEmpty);
+          _isProfileSetup = isSetup && hasNickname;
         });
         
         if (_isProfileSetup) {

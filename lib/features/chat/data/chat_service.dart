@@ -28,7 +28,12 @@ class ChatService {
       Uri.parse('$baseUrl/chat/profile'),
       headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
     ).timeout(const Duration(seconds: 10));
-    return jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load profile: ${response.statusCode}');
+    }
   }
 
   Future<bool> setupProfile(String nickname) async {
