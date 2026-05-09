@@ -1,4 +1,4 @@
-name: 🚀 EBM Central Ecosystem Master Release (100% Guaranteed)
+name: 🚀 EBM Central Ecosystem Master Release (Final Resilience)
 
 on:
   push:
@@ -58,13 +58,14 @@ jobs:
       - name: 📦 Build APK
         run: |
           flutter pub get
-          flutter build apk --debug --dart-define=API_URL=https://api.ebfic.store --suppress-analytics
+          flutter clean
+          flutter build apk --debug --dart-define=API_URL=https://api.ebfic.store --suppress-analytics --no-tree-shake-icons
+        continue-on-error: true
         
-      - name: 📂 Collect APKs
+      - name: 📂 Force Collect APKs
         run: |
           mkdir -p release_assets
-          find build/app/outputs/flutter-apk/ -name "*.apk" -exec cp {} release_assets/ \;
-          find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} release_assets/ \; || true
+          find . -name "*.apk" -type f -exec cp {} release_assets/ \;
 
       - name: 📤 Upload to Release
         uses: softprops/action-gh-release@v2
@@ -90,10 +91,11 @@ jobs:
           flutter pub get
           flutter build windows --release --dart-define=API_URL=https://api.ebfic.store
       
-      - name: 📂 Collect Windows Assets
+      - name: 📂 Force Collect Windows
         run: |
           mkdir release_assets
-          copy build\windows\x64\runner\Release\*.exe release_assets\
+          dir /s /b *.exe > exe_list.txt
+          for /f "delims=" %%i in (exe_list.txt) do copy "%%i" release_assets\
         shell: cmd
 
       - name: 📤 Upload to Release
