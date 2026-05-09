@@ -33,8 +33,9 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.REMOTE_PORT || 65002 }}
-          timeout: 120s
+          port: 65002
+          timeout: 300s
+          command_timeout: 30m
           source: "build/web/*"
           target: "domains/ebfic.com/public_html"
           strip_components: 2
@@ -56,7 +57,7 @@ jobs:
         run: |
           flutter pub get
           flutter clean
-      - name: 🤖 Build APK (Debug/Unsigned)
+      - name: 🤖 Build APK (Debug)
         run: flutter build apk --debug --dart-define=API_URL=https://api.ebfic.store --suppress-analytics
       - name: 🪟 Build Windows
         run: flutter build windows --release --dart-define=API_URL=https://api.ebfic.store --suppress-analytics
