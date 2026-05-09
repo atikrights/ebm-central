@@ -24,7 +24,7 @@ jobs:
       - name: 🏗️ Build Web
         run: |
           flutter pub get
-          flutter build web --release --web-renderer html --base-href "/" --dart-define=API_URL=https://api.ebfic.store
+          flutter build web --release --base-href "/" --dart-define=API_URL=https://api.ebfic.store
       - name: 📤 Upload via SCP
         uses: appleboy/scp-action@master
         with:
@@ -35,7 +35,7 @@ jobs:
           port: 65002
           timeout: 300s
           source: "build/web/*"
-          target: "domains/ebfic.store/public_html/central" # পরিবর্তিত সাব-ডোমেইন পাথ
+          target: "domains/ebfic.store/public_html/central"
           strip_components: 2
 
   # 🤖 অ্যান্ড্রয়েড বিল্ড
