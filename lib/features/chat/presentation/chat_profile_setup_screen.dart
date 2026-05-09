@@ -80,7 +80,7 @@ class _ChatProfileSetupScreenState extends ConsumerState<ChatProfileSetupScreen>
     });
 
     try {
-      final response = await _chatService.setupProfileWithResponse(_nameController.text.trim());
+      final response = await chatService.setupProfileWithResponse(_nameController.text.trim());
       
       if (response['success'] == true) {
         ref.read(authProvider.notifier).updateChatInfo(
