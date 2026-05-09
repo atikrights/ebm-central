@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import '../config/app_config.dart';
 
 // ─── ApiService Provider ───────────────────────────────────────────────────
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
@@ -15,25 +16,7 @@ final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
 /// - Production URL detection is automatic based on the current host.
 class ApiService {
   // ─── Base URL (Auto-detects Production vs Local) ─────────────────────────
-  String get baseUrl {
-    final String host = Uri.base.host;
-    
-    // 1. Local Development
-    if (host == 'localhost' || host == '127.0.0.1' || host.isEmpty) {
-      return 'http://127.0.0.1:8000/api';
-    }
-
-    // 2. Production Subdomain Mapping (Hostinger)
-    // Maps [anything].example.com -> api.example.com
-    final domainParts = host.split('.');
-    if (domainParts.length >= 2) {
-      final rootDomain = domainParts.sublist(domainParts.length - 2).join('.');
-      return 'https://api.$rootDomain/api';
-    }
-
-    // Fallback
-    return 'https://api.ebfic.store/api';
-  }
+  String get baseUrl => AppConfig.baseUrl;
 
   String? token;
 

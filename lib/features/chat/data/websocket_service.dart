@@ -2,12 +2,13 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
+import '../../../core/config/app_config.dart';
 
 final webSocketServiceProvider = Provider<WebSocketService>((ref) {
   return WebSocketService(
-    apiKey: 'ebm_key', // From .env or Reverb config
-    host: '127.0.0.1',
-    port: 8080,
+    apiKey: AppConfig.pusherKey,
+    host: AppConfig.baseDomain,
+    port: 443,
   );
 });
 
@@ -52,10 +53,10 @@ class WebSocketService {
 
     try {
       await pusher.init(
-        apiKey: "194c83322db5de281baf",
-        cluster: "ap2", 
+        apiKey: AppConfig.pusherKey,
+        cluster: AppConfig.pusherCluster, 
         useTLS: true,
-        authEndpoint: "http://127.0.0.1:8000/broadcasting/auth",
+        authEndpoint: AppConfig.authEndpoint,
         authParams: {
           'headers': {
             'Authorization': 'Bearer $token',

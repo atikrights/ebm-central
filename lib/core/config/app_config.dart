@@ -1,27 +1,34 @@
 import 'package:flutter/foundation.dart';
 
-/// Universal domain-aware configuration for EBM.
+/// EBM Global Configuration Management
 class AppConfig {
-  AppConfig._internal();
-  static final AppConfig instance = AppConfig._internal();
-
-  /// The root origin of the frontend.
-  String get origin => kIsWeb ? Uri.base.origin : 'https://central.ebfic.store';
-
-  /// Whether the app is currently running on localhost (dev mode).
-  bool get isLocalhost {
-    if (kIsWeb) {
-      final host = Uri.base.host;
-      return host == 'localhost' || host == '127.0.0.1';
+  /// Base API URL (e.g., https://api.ebfic.store/api)
+  static String get baseUrl {
+    // 1. Check if defined via --dart-define during build
+    const definedUrl = String.fromEnvironment('API_URL');
+    if (definedUrl.isNotEmpty) {
+      return definedUrl.endsWith('/api') ? definedUrl : '$definedUrl/api';
     }
-    return false;
+
+    // 2. Fallback to production if in release mode
+    if (kReleaseMode) {
+      return 'https://api.ebfic.store/api';
+    }
+
+    // 3. Local development fallback
+    return 'http://127.0.0.1:8000/api';
   }
 
-  // ------ Link Builders ------
+  /// Base Domain for WebSockets and Assets (e.g., api.ebfic.store)
+  static String get baseDomain {
+    final uri = Uri.parse(baseUrl);
+    return uri.host;
+  }
 
-  /// Public shareable asset link.
-  String assetLink(String assetId) => '$origin/assets/$assetId';
+  /// Broadcasting Auth Endpoint
+  static String get authEndpoint => '$baseUrl/broadcasting/auth';
 
-  /// Public shared asset link (for external use).
-  String sharedLink(String assetId) => '$origin/shared/$assetId';
+  /// Pusher Configuration
+  static const String pusherKey = "194c83322db5de281baf";
+  static const String pusherCluster = "ap2";
 }

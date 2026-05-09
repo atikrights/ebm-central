@@ -3,10 +3,11 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/app_config.dart';
 import 'chat_models.dart';
 
 final chatServiceProvider = Provider<ChatService>((ref) {
-  return ChatService(baseUrl: 'http://127.0.0.1:8000/api');
+  return ChatService(baseUrl: AppConfig.baseUrl);
 });
 
 class ChatService {
