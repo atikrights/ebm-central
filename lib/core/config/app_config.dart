@@ -48,7 +48,8 @@ class AppConfig {
     return baseUrl.contains('127.0.0.1') || baseUrl.contains('localhost');
   }
 
-  static String get authEndpoint => '$baseUrl/broadcasting/auth';
+  // NOTE: Laravel's broadcasting auth is at /broadcasting/auth (NOT /api/broadcasting/auth)
+  static String get authEndpoint => '${baseUrl.replaceFirst('/api', '')}/broadcasting/auth';
 
   /// Helper for generating asset links
   static String assetLink(String assetId) => '$baseUrl/assets/$assetId/view';
