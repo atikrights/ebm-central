@@ -1,14 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:frontend/core/config/app_config.dart';
 import 'package:frontend/features/assets/providers/asset_provider.dart';
-import 'package:frontend/features/assets/models/asset_model.dart';
 import 'package:iconsax_plus/iconsax_plus.dart';
+import 'dart:io' if (dart.library.html) 'package:frontend/core/utils/io_stub.dart';
 
 /// A universal image widget that handles local paths, web URLs, and Asset IDs.
-/// It automatically resolves "Live Links" to local files on Desktop/Mobile to save bandwidth.
 class EbmImage extends ConsumerWidget {
   final String source;
   final double? width;
@@ -35,20 +33,27 @@ class EbmImage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (source.isEmpty) return _error();
 
-    // 1. Check if it's a direct web URL (not on our domain)
+    // 1. Check if it's a direct web URL
     if (source.startsWith('http') && !source.contains(AppConfig.origin)) {
       return _networkImage(source);
     }
 
-    // 2. Local File path (Desktop/Mobile)
+    // 2. Local File path (Desktop/Mobile Only)
     if (!kIsWeb && !source.startsWith('http')) {
       final file = File(source);
       if (file.existsSync()) {
-        return _fileImage(file);
+        return Image.file(
+          file,
+          width: width,
+          height: height,
+          fit: fit,
+          cacheWidth: isThumbnail ? 300 : cacheWidth,
+          errorBuilder: (context, error, stackTrace) => errorWidget ?? _error(),
+        );
       }
     }
 
-    // 3. Asset ID or Domain-Relative URL (e.g. domain.com/assets/ID)
+    // 3. Asset ID or Domain-Relative URL
     String? assetId;
     if (source.startsWith('asset://')) {
       assetId = source.replaceFirst('asset://', '');
@@ -68,22 +73,27 @@ class EbmImage extends ConsumerWidget {
         // On Desktop/Mobile, prefer local path if available
         if (!kIsWeb && asset.path.isNotEmpty) {
           final localFile = File(asset.path);
-          if (localFile.existsSync()) return _fileImage(localFile);
+          if (localFile.existsSync()) {
+            return Image.file(
+              localFile,
+              width: width,
+              height: height,
+              fit: fit,
+              cacheWidth: isThumbnail ? 300 : cacheWidth,
+              errorBuilder: (context, error, stackTrace) => errorWidget ?? _error(),
+            );
+          }
         }
         
-        // On Web or if local missing, use resolved URL
+        // Fallback to URL
         if (asset.url != null && asset.url!.isNotEmpty) {
           return _networkImage(asset.url!);
         }
-        
-        // Fallback to AppConfig generated link
         return _networkImage(AppConfig.assetLink(asset.id));
       }
     }
 
-    // 4. Default fallback: try treating as Network if looks like URL, else error
     if (source.startsWith('http')) return _networkImage(source);
-    
     return _error();
   }
 
@@ -98,17 +108,6 @@ class EbmImage extends ConsumerWidget {
         if (loadingProgress == null) return child;
         return placeholder ?? _placeholder();
       },
-      errorBuilder: (context, error, stackTrace) => errorWidget ?? _error(),
-    );
-  }
-
-  Widget _fileImage(File file) {
-    return Image.file(
-      file,
-      width: width,
-      height: height,
-      fit: fit,
-      cacheWidth: isThumbnail ? 300 : cacheWidth,
       errorBuilder: (context, error, stackTrace) => errorWidget ?? _error(),
     );
   }

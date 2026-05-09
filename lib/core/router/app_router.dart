@@ -13,7 +13,7 @@ import '../../features/projects/presentation/single_project_manage_screen.dart';
 import '../../features/teams/presentation/teams_screen.dart';
 import '../../features/teams/presentation/teams_control_screen.dart';
 import '../../shared/widgets/window_title_bar.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:frontend/core/utils/io_stub.dart';
 import 'package:flutter/foundation.dart';
 
 // ─────────────────────────────────────────────

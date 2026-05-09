@@ -1,5 +1,5 @@
 import 'dart:ui';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:frontend/core/utils/io_stub.dart';
 import '../../features/assets/presentation/asset_library_screen.dart';
 import '../../features/live/presentation/live_screen.dart';
 import 'package:flutter/foundation.dart';

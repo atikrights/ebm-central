@@ -46,8 +46,9 @@ class WebSocketService {
   }) async {
     if (token == null) return;
     if (_isInitialized) {
+      final prefix = AppConfig.envPrefix;
       // Re-subscribe to user channels if ID changed, otherwise skip re-init
-      await pusher.subscribe(channelName: 'private-dm.$userId');
+      await pusher.subscribe(channelName: 'private-${prefix}dm.$userId');
       return;
     }
 
