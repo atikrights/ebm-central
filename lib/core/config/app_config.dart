@@ -1,13 +1,29 @@
 import 'package:flutter/foundation.dart';
+import 'dart:html' as html;
 
 /// EBM Global Configuration Management
 class AppConfig {
   /// Base API URL (e.g., https://api.ebfic.store/api)
   static String get baseUrl {
+    // 1. Check for build-time definition
     const definedUrl = String.fromEnvironment('API_URL');
     if (definedUrl.isNotEmpty) {
       return definedUrl.endsWith('/api') ? definedUrl : '$definedUrl/api';
     }
+
+    // 2. Web Smart Detection (Check current browser origin)
+    if (kIsWeb) {
+      final host = html.window.location.hostname;
+      // If we are on any subdomain of ebfic.store (central, app, etc.)
+      if (host.contains('ebfic.store')) {
+        return 'https://api.ebfic.store/api';
+      }
+      if (host == 'localhost' || host == '127.0.0.1') {
+        return 'http://127.0.0.1:8000/api';
+      }
+    }
+
+    // 3. Fallback based on mode
     if (kReleaseMode) {
       return 'https://api.ebfic.store/api';
     }
@@ -45,7 +61,7 @@ class AppConfig {
   /// Helper for generating asset links
   static String assetLink(String assetId) => '$baseUrl/assets/$assetId/view';
 
-  /// Helper for generating shared asset links (User suggested path)
+  /// Helper for generating shared asset links
   static String sharedLink(String assetId) => '$baseUrl/assets/$assetId/share';
 
   /// Pusher Configuration
