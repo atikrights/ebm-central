@@ -77,9 +77,9 @@ class WebSocketService {
       );
 
       final prefix = AppConfig.envPrefix;
-      await pusher.subscribe(channelName: '${prefix}private-dm.$userId');
-      await pusher.subscribe(channelName: '${prefix}presence-chat-presence');
-      await pusher.subscribe(channelName: '${prefix}private-ebm-global');
+      await pusher.subscribe(channelName: 'private-${prefix}dm.$userId');
+      await pusher.subscribe(channelName: 'presence-${prefix}chat-presence');
+      await pusher.subscribe(channelName: 'private-${prefix}ebm-global');
 
       await pusher.connect();
       _isInitialized = true;
