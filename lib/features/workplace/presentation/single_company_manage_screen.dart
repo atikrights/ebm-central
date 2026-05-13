@@ -776,11 +776,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1000),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (company.status == CompanyStatus.pending)
                 _buildApprovalBar(company, isDark).animate().fadeIn().slideY(begin: -0.1, end: 0),
@@ -1102,8 +1099,6 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
               const SizedBox(height: 60),
             ],
           ),
-        ),
-      ),
     );
   }
 
@@ -1168,8 +1163,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 5,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: MediaQuery.of(context).size.width > 1200 ? 6 : (MediaQuery.of(context).size.width > 800 ? 4 : 2),
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
             childAspectRatio: 1.4,

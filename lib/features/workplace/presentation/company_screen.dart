@@ -79,6 +79,10 @@ class CompanyScreen extends ConsumerWidget {
               ),
               const SizedBox(width: 10),
               _buildDraftBoxIcon(context, ref, isDark, textColor, archivedCount),
+              if (ref.watch(authProvider).isSuperAdmin) ...[
+                const SizedBox(width: 8),
+                _buildRecycleBinIcon(context, ref, isDark, textColor),
+              ],
               const SizedBox(width: 8),
               _buildCreateButton(context, ref, isMobile, isDark, textColor),
             ],
@@ -173,6 +177,50 @@ class CompanyScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildRecycleBinIcon(BuildContext context, WidgetRef ref, bool isDark, Color textColor) {
+    final trashedCount = ref.watch(trashedCompaniesProvider).length;
+
+    return Tooltip(
+      message: 'Recycle Bin (Super Admin)',
+      child: InkWell(
+        onTap: () => showRecycleBinPopup(context, ref, isDark, textColor),
+        onHover: (_) {
+           if (trashedCount == 0) ref.read(companyProvider.notifier).fetchTrashed();
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: Colors.redAccent.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              const Icon(IconsaxPlusBold.trash, color: Colors.redAccent, size: 16),
+              if (trashedCount > 0)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
+                    child: Text(
+                      '$trashedCount',
+                      style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                    ),
+                  ).animate().shake(),
+                )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCreateButton(BuildContext context, WidgetRef ref, bool isMobile, bool isDark, Color textColor) {
     final auth = ref.watch(authProvider);
     
@@ -250,8 +298,20 @@ class CompanyScreen extends ConsumerWidget {
       );
     }
 
-    // Responsive: mobile=1 col, tablet=2 col, desktop=3+ col
-    final crossAxisCount = width < 600 ? 1 : (width < 1100 ? 2 : 3);
+    // Responsive: mobile=1 col, tablet=2 col, desktop=3 col, ultrawide=4+ cols
+    int crossAxisCount;
+    if (width < 650) {
+      crossAxisCount = 1;
+    } else if (width < 1100) {
+      crossAxisCount = 2;
+    } else if (width < 1500) {
+      crossAxisCount = 3;
+    } else if (width < 1900) {
+      crossAxisCount = 4;
+    } else {
+      crossAxisCount = 5;
+    }
+    
     final cardHeight = width < 600 ? 220.0 : 240.0;
 
     return GridView.builder(
@@ -330,8 +390,8 @@ void showRecoveryPopup(BuildContext context, WidgetRef ref, bool isDark, Color t
                                   builder: (context) => AlertDialog(
                                     backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                    title: const Text('Permanent Delete?'),
-                                    content: Text('Are you sure you want to permanently delete "${comp.name}"? This action cannot be undone.'),
+                                    title: const Text('Move to Recycle Bin?'),
+                                    content: Text('"${comp.name}" will be removed from your team records and sent to the Super Admin for final review.'),
                                     actions: [
                                       TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                                       ElevatedButton(
@@ -340,7 +400,7 @@ void showRecoveryPopup(BuildContext context, WidgetRef ref, bool isDark, Color t
                                           Navigator.pop(context);
                                         },
                                         style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-                                        child: const Text('Delete Permanently'),
+                                        child: const Text('Move to Recycle Bin'),
                                       ),
                                     ],
                                   ),
@@ -355,6 +415,126 @@ void showRecoveryPopup(BuildContext context, WidgetRef ref, bool isDark, Color t
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+void showRecycleBinPopup(BuildContext context, WidgetRef ref, bool isDark, Color textColor) {
+  // Fetch immediately
+  ref.read(companyProvider.notifier).fetchTrashed();
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return Consumer(
+        builder: (context, ref, child) {
+          final trashed = ref.watch(trashedCompaniesProvider);
+          return AlertDialog(
+            backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: Row(
+              children: [
+                const Icon(IconsaxPlusBold.trash, color: Colors.redAccent),
+                const SizedBox(width: 10),
+                Text('Recycle Bin', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                if (trashed.isNotEmpty)
+                  Text('${trashed.length} items', style: TextStyle(fontSize: 12, color: Colors.redAccent.withOpacity(0.7))),
+              ],
+            ),
+            content: SizedBox(
+              width: 450,
+              height: 400,
+              child: trashed.isEmpty 
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(IconsaxPlusLinear.trash, size: 48, color: isDark ? Colors.white10 : Colors.black12),
+                        const SizedBox(height: 16),
+                        Text('Recycle bin is empty', style: TextStyle(color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: trashed.length,
+                    itemBuilder: (context, index) {
+                      final comp = trashed[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 32, height: 32,
+                              decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.1), shape: BoxShape.circle),
+                              child: const Icon(IconsaxPlusBold.building_3, color: Colors.redAccent, size: 16),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(comp.name, style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 14)),
+                                  Text('CID: ${comp.id}', style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Restore',
+                              icon: const Icon(IconsaxPlusLinear.refresh_right_square, size: 20, color: Color(0xFF00C896)),
+                              onPressed: () async {
+                                await ref.read(companyProvider.notifier).restoreTrashed(comp.id);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('${comp.name} restored successfully'), backgroundColor: const Color(0xFF00C896)),
+                                  );
+                                }
+                              },
+                            ),
+                            IconButton(
+                              tooltip: 'Permanent Delete',
+                              icon: const Icon(IconsaxPlusLinear.trash, size: 20, color: Colors.redAccent),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                    title: const Text('Permanent Delete?'),
+                                    content: Text('Are you sure you want to PERMANENTLY remove "${comp.name}"? This cannot be undone.'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                                      ElevatedButton(
+                                        onPressed: () async {
+                                          await ref.read(companyProvider.notifier).permanentDelete(comp.id);
+                                          if (context.mounted) Navigator.pop(context);
+                                        },
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                        child: const Text('Wipe Data'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ).animate().fadeIn(delay: Duration(milliseconds: 50 * index)).slideX(begin: 0.1, end: 0);
+                    },
+                  ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: Text('Close', style: TextStyle(color: textColor))),
             ],
           );
         },
@@ -548,7 +728,7 @@ void showCreateCompanyPopup(BuildContext context, WidgetRef ref, bool isDark, Co
           onPressed: () {
             if (nameController.text.isNotEmpty) {
               ref.read(companyProvider.notifier).addCompany(Company(
-                id: 'PENDING', // The backend will assign the exact 6-digit CID
+                id: 'PENDING', 
                 name: nameController.text,
                 website: websiteController.text,
                 categories: selectedCategories,

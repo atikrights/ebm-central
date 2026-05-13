@@ -178,15 +178,20 @@ class ChatService {
     return null;
   }
 
+  /// Returns all users in the same team as the current user.
+  /// Uses the team-scoped /teams/members endpoint (backed by TeamHandler).
+  /// Admin sees all their subordinates; Sub-Admin/Manager/Staff see teammates.
   Future<List<Map<String, dynamic>>> getTeamUsers() async {
     final token = await _getToken();
     final response = await http.get(
-      Uri.parse('$baseUrl/chat/profile/team'),
+      Uri.parse('$baseUrl/teams/members'),
       headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    );
+    ).timeout(const Duration(seconds: 10));
+
     if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.cast<Map<String, dynamic>>();
+      final Map<String, dynamic> body = jsonDecode(response.body);
+      final List members = body['members'] ?? [];
+      return members.cast<Map<String, dynamic>>();
     }
     return [];
   }

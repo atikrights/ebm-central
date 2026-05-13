@@ -1,48 +1,143 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
 
 import 'package:frontend/core/network/api_service.dart';
+import 'package:frontend/features/chat/data/websocket_service.dart';
 import 'package:frontend/features/governance/presentation/approval_center_screen.dart';
 
 
-// Models
+// ─── Data Models ────────────────────────────────────────────────────────────
+
 class TeamMember {
+  final int id;
   final String name;
   final String email;
-  final String role;
-  TeamMember({required this.name, required this.email, required this.role});
-  
+  final String role;        // Team pivot role: leader, sub_admin, manager, staff
+  final String systemRole;  // User's system role: admin, manager, staff
+  final String? chatProfileId;
+  final String? uid;
+
+  TeamMember({
+    required this.id,
+    required this.name,
+    required this.email,
+    required this.role,
+    required this.systemRole,
+    this.chatProfileId,
+    this.uid,
+  });
+
   factory TeamMember.fromJson(Map<String, dynamic> json) {
-    String parsedRole = json['role'] ?? '';
+    // Prefer pivot role (team role) over system role for display categorization
+    String pivotRole = '';
     if (json['pivot'] != null && json['pivot']['role'] != null) {
-      parsedRole = json['pivot']['role'];
+      pivotRole = json['pivot']['role'].toString();
     }
-    
+    // Fallback to system role if no pivot
+    String systemRole = json['role']?.toString() ?? 'staff';
+    String displayRole = pivotRole.isNotEmpty ? pivotRole : systemRole;
+
     return TeamMember(
+      id: json['id'] ?? 0,
       name: json['name'] ?? '',
       email: json['email'] ?? '',
-      role: parsedRole,
+      role: displayRole,
+      systemRole: systemRole,
+      chatProfileId: json['chat_profile_id']?.toString(),
+      uid: json['uid']?.toString(),
+    );
+  }
+
+  /// Returns a user-friendly label for the role badge
+  String get roleLabel {
+    switch (role.toLowerCase()) {
+      case 'leader': return 'Admin';
+      case 'sub_admin': return 'Sub-Admin';
+      case 'manager': return 'Manager';
+      case 'staff': return 'Staff';
+      default: return role.toUpperCase();
+    }
+  }
+
+  bool get isAuthority => ['leader', 'sub_admin'].contains(role.toLowerCase());
+}
+
+class TeamCompany {
+  final int id;
+  final String name;
+  final String slug;
+
+  TeamCompany({required this.id, required this.name, required this.slug});
+
+  factory TeamCompany.fromJson(Map<String, dynamic> json) {
+    return TeamCompany(
+      id: json['id'] ?? 0,
+      name: json['name'] ?? '',
+      slug: json['slug'] ?? '',
     );
   }
 }
 
 class Team {
-  final String id;
+  final int id;
   final String name;
+  final String description;
+  final String? logoUrl;
   final String teamCode;
   final List<TeamMember> members;
-  Team({required this.id, required this.name, required this.teamCode, required this.members});
-  
+  final String? leaderName;
+  final List<TeamCompany> companies;
+
+  Team({
+    required this.id,
+    required this.name,
+    required this.description,
+    this.logoUrl,
+    required this.teamCode,
+    required this.members,
+    this.leaderName,
+    required this.companies,
+  });
+
   factory Team.fromJson(Map<String, dynamic> json) {
+    // Parse companies (new architecture: Team hasMany Companies)
+    List<TeamCompany> companies = [];
+    if (json['companies'] != null) {
+      companies = (json['companies'] as List)
+          .map((c) => TeamCompany.fromJson(c))
+          .toList();
+    }
+
     return Team(
-      id: json['id']?.toString() ?? '',
+      id: json['id'] ?? 0,
       name: json['name'] ?? '',
+      description: json['description'] ?? '',
+      logoUrl: json['logo_url'],
       teamCode: json['team_code'] ?? '',
-      members: (json['members'] as List?)?.map((m) => TeamMember.fromJson(m)).toList() ?? [],
+      members: (json['members'] as List?)
+              ?.map((m) => TeamMember.fromJson(m))
+              .toList() ??
+          [],
+      leaderName: json['leader']?['name']?.toString(),
+      companies: companies,
     );
   }
+
+  /// All admins/sub-admins in this team
+  List<TeamMember> get authorities =>
+      members.where((m) => m.isAuthority).toList();
+
+  /// Managers in this team
+  List<TeamMember> get managers =>
+      members.where((m) => m.role.toLowerCase() == 'manager').toList();
+
+  /// Staff in this team
+  List<TeamMember> get staff =>
+      members.where((m) => m.role.toLowerCase() == 'staff').toList();
 }
 
 class TeamsResponse {
@@ -85,10 +180,36 @@ class TeamsScreen extends ConsumerStatefulWidget {
 
 class _TeamsScreenState extends ConsumerState<TeamsScreen> {
   bool _hasSeenWelcome = false;
+  Timer? _refreshTimer;
+
+  void _onWsEvent(PusherEvent event) {
+    if (event.eventName.contains('data.updated') || event.eventName.contains('user.created')) {
+      if (mounted) {
+        ref.invalidate(teamsProvider);
+      }
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    
+    // Real-time listener for "God Mode" updates
+    ref.read(webSocketServiceProvider).addListener(_onWsEvent);
+
+    // Auto-refresh fallback
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) {
+        ref.invalidate(teamsProvider);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    ref.read(webSocketServiceProvider).removeListener(_onWsEvent);
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   void _showWelcomePopup() {
@@ -131,13 +252,8 @@ class _TeamsScreenState extends ConsumerState<TeamsScreen> {
           }
 
           if (response.teams.isEmpty) {
-            return const Center(child: Text('No Teams Found. Create one.'));
+            return const Center(child: Text('No Teams Found in the system.'));
           }
-          final team = response.teams.first; // Display the first team for now
-          
-          final admins = team.members.where((m) => m.role == 'admin' || m.role == 'sub_admin' || m.role == 'leader').toList();
-          final managers = team.members.where((m) => m.role == 'manager').toList();
-          final staffs = team.members.where((m) => m.role == 'staff').toList();
 
           return Padding(
             padding: const EdgeInsets.all(24.0),
@@ -164,27 +280,76 @@ class _TeamsScreenState extends ConsumerState<TeamsScreen> {
                   ],
                 ),
                 const SizedBox(height: 32),
-                Expanded(
-                  child: isDesktop 
-                    ? Row(
+                  Expanded(
+                  child: ListView.builder(
+                    itemCount: response.teams.length,
+                    physics: const BouncingScrollPhysics(),
+                    itemBuilder: (context, index) {
+                      final team = response.teams[index];
+
+                      return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: _buildTeamColumn('Admins (Sub-Admins)', admins, context, team.id)),
-                          const SizedBox(width: 16),
-                          Expanded(child: _buildTeamColumn('Managers', managers, context, team.id)),
-                          const SizedBox(width: 16),
-                          Expanded(child: _buildTeamColumn('Staff', staffs, context, team.id)),
+                          // Team header (shown only when multiple teams)
+                          if (response.teams.length > 1)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 24, bottom: 12),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blueAccent.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.group_work_rounded, size: 14, color: Colors.blueAccent),
+                                        const SizedBox(width: 6),
+                                        Text(team.name.toUpperCase(),
+                                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blueAccent, letterSpacing: 0.5)),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text('ID: ${team.teamCode}',
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey, letterSpacing: 1)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          isDesktop
+                            ? Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(child: _buildTeamColumn('Admins & Sub-Admins', team.authorities, context, team.id)),
+                                  const SizedBox(width: 16),
+                                  Expanded(child: _buildTeamColumn('Managers', team.managers, context, team.id)),
+                                  const SizedBox(width: 16),
+                                  Expanded(child: _buildTeamColumn('Staff', team.staff, context, team.id)),
+                                ],
+                              )
+                            : Column(
+                                children: [
+                                  _buildTeamColumn('Admins & Sub-Admins', team.authorities, context, team.id),
+                                  const SizedBox(height: 16),
+                                  _buildTeamColumn('Managers', team.managers, context, team.id),
+                                  const SizedBox(height: 16),
+                                  _buildTeamColumn('Staff', team.staff, context, team.id),
+                                ],
+                              ),
+                          const SizedBox(height: 48),
                         ],
-                      )
-                    : ListView(
-                        children: [
-                          _buildTeamColumn('Admins (Sub-Admins)', admins, context, team.id),
-                          const SizedBox(height: 16),
-                          _buildTeamColumn('Managers', managers, context, team.id),
-                          const SizedBox(height: 16),
-                          _buildTeamColumn('Staff', staffs, context, team.id),
-                        ],
-                      ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -194,15 +359,16 @@ class _TeamsScreenState extends ConsumerState<TeamsScreen> {
     );
   }
 
-  Widget _buildTeamColumn(String title, List<TeamMember> members, BuildContext context, String teamId) {
+  Widget _buildTeamColumn(String title, List<TeamMember> members, BuildContext context, int teamId) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: isDark ? Colors.white.withOpacity(0.03) : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: isDark ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.05)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           )
@@ -215,39 +381,89 @@ class _TeamsScreenState extends ConsumerState<TeamsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.blueAccent.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text('${members.length}',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline, color: Colors.blueAccent, size: 20),
+                    onPressed: () => _showInviteDialog(context, title, teamId.toString()),
+                    tooltip: 'Invite member',
+                  ),
+                ],
               ),
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline, color: Colors.blueAccent),
-                onPressed: () {
-                  _showInviteDialog(context, title, teamId);
-                },
-              )
             ],
           ),
-          const Divider(),
-          const SizedBox(height: 8),
+          const Divider(height: 16),
           members.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text('No members yet.', style: TextStyle(color: Colors.grey)),
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Row(
+                  children: [
+                    Icon(Icons.person_add_alt_rounded, size: 16, color: Colors.grey.withOpacity(0.4)),
+                    const SizedBox(width: 8),
+                    const Text('No members yet.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  ],
+                ),
               )
-            : ListView.builder(
+            : ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: members.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 4),
                 itemBuilder: (context, index) {
                   final m = members[index];
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                      backgroundColor: Colors.blueAccent.withOpacity(0.2),
-                      child: Text(m.name[0], style: const TextStyle(color: Colors.blueAccent)),
+                  final badgeColor = m.isAuthority
+                    ? Colors.blueAccent
+                    : (m.role == 'manager' ? Colors.orange : Colors.green);
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.015),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    title: Text(m.name),
-                    subtitle: Text(m.email, style: const TextStyle(fontSize: 12)),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: badgeColor.withOpacity(0.12),
+                          child: Text(m.name[0].toUpperCase(),
+                            style: TextStyle(color: badgeColor, fontWeight: FontWeight.bold, fontSize: 14)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(m.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                              Text(m.email, style: TextStyle(fontSize: 11, color: Colors.grey.withOpacity(0.7)),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: badgeColor.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: badgeColor.withOpacity(0.2)),
+                          ),
+                          child: Text(m.roleLabel,
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: badgeColor)),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),
@@ -388,3 +604,6 @@ class TeamsWelcomePopup extends ConsumerWidget {
     );
   }
 }
+
+
+

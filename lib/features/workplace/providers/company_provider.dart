@@ -11,6 +11,7 @@ import '../models/company.dart';
 // ─────────────────────────────────────────────
 class CompanyState {
   final List<Company> companies;
+  final List<Company> trashedCompanies;
   final List<String> categories;
   final String searchQuery;
   final String? filterCategory;
@@ -19,6 +20,7 @@ class CompanyState {
 
   CompanyState({
     this.companies = const [],
+    this.trashedCompanies = const [],
     this.categories = const [],
     this.searchQuery = '',
     this.filterCategory,
@@ -28,6 +30,7 @@ class CompanyState {
 
   CompanyState copyWith({
     List<Company>? companies,
+    List<Company>? trashedCompanies,
     List<String>? categories,
     String? searchQuery,
     String? filterCategory,
@@ -36,6 +39,7 @@ class CompanyState {
   }) {
     return CompanyState(
       companies: companies ?? this.companies,
+      trashedCompanies: trashedCompanies ?? this.trashedCompanies,
       categories: categories ?? this.categories,
       searchQuery: searchQuery ?? this.searchQuery,
       filterCategory: filterCategory ?? this.filterCategory,
@@ -330,6 +334,52 @@ class CompanyNotifier extends AsyncNotifier<CompanyState> {
     }
   }
 
+  // ── RECYCLE BIN ACTIONS (SUPER ADMIN ONLY) ───────────────────
+
+  Future<void> fetchTrashed() async {
+    if (state.value == null) return;
+    try {
+      final api = ref.read(apiServiceProvider);
+      final List<dynamic> response = await api.get('/companies/trashed');
+      final trashed = response.map((m) => Company.fromMap(m)).toList();
+      
+      state = AsyncData(state.value!.copyWith(trashedCompanies: trashed));
+    } catch (_) {}
+  }
+
+  Future<void> restoreTrashed(String id) async {
+    if (state.value == null) return;
+    final oldState = state.value!;
+    try {
+      final api = ref.read(apiServiceProvider);
+      await api.post('/companies/$id/restore', {});
+      
+      // Update local state by removing from trashed
+      state = AsyncData(oldState.copyWith(
+        trashedCompanies: oldState.trashedCompanies.where((c) => c.id != id).toList()
+      ));
+      
+      await syncWithDatabase(); // Pull the restored company back into active list
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> permanentDelete(String id) async {
+    if (state.value == null) return;
+    final oldState = state.value!;
+    try {
+      final api = ref.read(apiServiceProvider);
+      await api.delete('/companies/$id/force-delete');
+      
+      state = AsyncData(oldState.copyWith(
+        trashedCompanies: oldState.trashedCompanies.where((c) => c.id != id).toList()
+      ));
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<void> manageCategory(String? oldName, String newName, List<String> assignedCompanyIds) async {
     if (state.value == null) return;
     final currentState = state.value!;
@@ -469,6 +519,14 @@ final archivedCompaniesProvider = Provider<List<Company>>((ref) {
   final asyncState = ref.watch(companyProvider);
   return asyncState.maybeWhen(
     data: (state) => state.companies.where((c) => c.status == CompanyStatus.archived).toList(),
+    orElse: () => [],
+  );
+});
+
+final trashedCompaniesProvider = Provider<List<Company>>((ref) {
+  final asyncState = ref.watch(companyProvider);
+  return asyncState.maybeWhen(
+    data: (state) => state.trashedCompanies,
     orElse: () => [],
   );
 });

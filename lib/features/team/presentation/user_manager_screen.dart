@@ -138,7 +138,14 @@ class _UserManagerScreenState extends ConsumerState<UserManagerScreen> with Sing
     return usersAsync.when(
       data: (users) {
         List<dynamic> filteredUsers = users;
-        if (_activeFilter != "All") {
+        
+        // Custom filtering logic for Acting Roles
+        if (_activeFilter == "SUB_ADMIN") {
+          filteredUsers = users.where((u) {
+            final teams = u['teams'] as List? ?? [];
+            return teams.any((t) => t['pivot']?['role'] == 'sub_admin');
+          }).toList();
+        } else if (_activeFilter != "All") {
           filteredUsers = users.where((u) => u['role'].toString().toUpperCase() == _activeFilter.toUpperCase()).toList();
         }
 
@@ -147,6 +154,10 @@ class _UserManagerScreenState extends ConsumerState<UserManagerScreen> with Sing
         final int adminCount = users.where((u) => u['role'].toString().toUpperCase() == 'ADMIN').length;
         final int managerCount = users.where((u) => u['role'].toString().toUpperCase() == 'MANAGER').length;
         final int staffCount = users.where((u) => u['role'].toString().toUpperCase() == 'STAFF').length;
+        final int subAdminCount = users.where((u) {
+          final teams = u['teams'] as List? ?? [];
+          return teams.any((t) => t['pivot']?['role'] == 'sub_admin');
+        }).length;
 
         return RefreshIndicator(
           onRefresh: () => ref.read(userListProvider.notifier).fetchUsers(),
@@ -167,6 +178,8 @@ class _UserManagerScreenState extends ConsumerState<UserManagerScreen> with Sing
                         _buildTextFilter("SUPER_ADMIN", superAdminCount),
                         _buildFilterDivider(),
                         _buildTextFilter("ADMIN", adminCount),
+                        _buildFilterDivider(),
+                        _buildTextFilter("SUB_ADMIN", subAdminCount),
                       ],
                       _buildFilterDivider(),
                       _buildTextFilter("MANAGER", managerCount),
@@ -292,6 +305,11 @@ class _UserManagerScreenState extends ConsumerState<UserManagerScreen> with Sing
     final String uid = user['uid'] ?? 'N/A';
     final String username = email.split('@')[0];
 
+    // Detect Acting Role (Sub-Admin in any team)
+    final teams = user['teams'] as List? ?? [];
+    final bool isSubAdmin = teams.any((t) => t['pivot']?['role'] == 'sub_admin');
+    final String actingIn = isSubAdmin ? (teams.firstWhere((t) => t['pivot']?['role'] == 'sub_admin')['name'] ?? 'Team') : '';
+
     return Container(
       width: 1000,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -341,8 +359,27 @@ class _UserManagerScreenState extends ConsumerState<UserManagerScreen> with Sing
           // Email Column
           SizedBox(width: 220, child: Text(email, style: const TextStyle(fontSize: 13, color: AdminTheme.primary), overflow: TextOverflow.ellipsis)),
           
-          // Role Column
-          SizedBox(width: 120, child: Text(role, style: const TextStyle(fontSize: 11, letterSpacing: 1, color: Colors.grey))),
+          // Role Column (Original Role + Acting Badge)
+          SizedBox(
+            width: 120, 
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(role, style: const TextStyle(fontSize: 10, letterSpacing: 1, color: Colors.grey, fontWeight: FontWeight.bold)),
+                if (isSubAdmin)
+                  Container(
+                    margin: const EdgeInsets.only(top: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.blueAccent.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text("ACTING: SUB-ADMIN", style: const TextStyle(fontSize: 7, color: Colors.blueAccent, fontWeight: FontWeight.w900)),
+                  ),
+              ],
+            )
+          ),
           
           // Actions Column
           SizedBox(
@@ -882,6 +919,8 @@ class _AddIdentityDialogState extends State<_AddIdentityDialog> with SingleTicke
               const SizedBox(width: 12),
             ],
             if (isSuperAdmin || isAdmin) ...[
+              _roleChip("sub_admin", "Sub-Admin", currentRole == "sub_admin", forLink),
+              const SizedBox(width: 12),
               _roleChip("manager", "Manager", currentRole == "manager", forLink),
               const SizedBox(width: 12),
             ],

@@ -36,8 +36,8 @@ class AuthState {
     this.error,
   });
 
-  bool get isAdmin => role == 'ADMIN' || role == 'SUPER_ADMIN';
-  bool get isSuperAdmin => role == 'SUPER_ADMIN';
+  bool get isAdmin => role?.toUpperCase() == 'ADMIN' || role?.toUpperCase() == 'SUPER_ADMIN';
+  bool get isSuperAdmin => role?.toUpperCase() == 'SUPER_ADMIN';
 
   AuthState copyWith({
     bool? isLoggedIn,
