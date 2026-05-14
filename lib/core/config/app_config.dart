@@ -15,9 +15,18 @@ class AppConfig {
       if (host.endsWith('ebfic.store')) {
         return 'https://api.ebfic.store/api';
       }
-      if (host == 'localhost' || host == '127.0.0.1' || host.startsWith('192.168.')) {
+      if (host == 'localhost' || host == '127.0.0.1') {
         return 'http://127.0.0.1:8000/api';
       }
+      if (RegExp(r'^[0-9]+(?:\.[0-9]+){3}$').hasMatch(host)) {
+        return 'http://$host:8000/api';
+      }
+      final parts = host.split('.');
+      if (parts.length > 2) {
+        final rootDomain = parts.sublist(parts.length - 2).join('.');
+        return 'https://api.$rootDomain/api';
+      }
+      return 'https://$host/api';
     }
 
     if (kReleaseMode) {
