@@ -102,4 +102,42 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
       rethrow;
     }
   }
+
+  Future<void> approveProject(String projectId) async {
+    try {
+      await _api.put('/projects/$projectId', {'is_approved': true});
+      await fetchProjects();
+    } catch (e) { rethrow; }
+  }
+
+  Future<void> addPlan(String projectId, String title, String description) async {
+    try {
+      await _api.post('/projects/$projectId/plans', {
+        'title': title,
+        'description': description,
+      });
+      await fetchProjects();
+    } catch (e) { rethrow; }
+  }
+
+  Future<void> removePlan(String projectId, String planId) async {
+    try {
+      await _api.delete('/plans/$planId');
+      await fetchProjects();
+    } catch (e) { rethrow; }
+  }
+
+  Future<void> assignAuthorToPlan(String projectId, String planId, String author) async {
+    try {
+      await _api.put('/plans/$planId', {'assigned_to': author});
+      await fetchProjects();
+    } catch (e) { rethrow; }
+  }
+
+  Future<void> updateProject(String projectId, Map<String, dynamic> data) async {
+    try {
+      await _api.put('/projects/$projectId', data);
+      await fetchProjects();
+    } catch (e) { rethrow; }
+  }
 }

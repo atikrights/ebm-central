@@ -12,6 +12,7 @@ import '../../features/workplace/presentation/single_company_manage_screen.dart'
 import '../../features/projects/presentation/single_project_manage_screen.dart';
 import '../../features/teams/presentation/teams_screen.dart';
 import '../../features/teams/presentation/teams_control_screen.dart';
+import '../../features/governance/presentation/authority_matrix_screen.dart';
 import '../../shared/widgets/window_title_bar.dart';
 import 'dart:io' if (dart.library.html) 'package:frontend/core/utils/io_stub.dart';
 import 'package:flutter/foundation.dart';
@@ -139,6 +140,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/teams-control',
             name: 'teams_control',
             builder: (context, state) => const TeamsControlScreen(),
+          ),
+
+          // Authority Matrix — Role & Permission Control
+          GoRoute(
+            path: '/user-role',
+            name: 'user_role',
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const AuthorityMatrixScreen(),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+            ),
           ),
 
           GoRoute(

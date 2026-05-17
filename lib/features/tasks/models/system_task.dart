@@ -93,6 +93,7 @@ class SystemTask {
   final String? planId; // Linked to a specific Plan
   final String? projectId; // Linked to a specific Project
   final bool isArchived;
+  final bool isApproved;
 
   SystemTask({
     required this.id,
@@ -116,6 +117,7 @@ class SystemTask {
     this.planId,
     this.projectId,
     this.isArchived = false,
+    this.isApproved = true,
   });
 
   double get totalSubTaskCost => subTasks.fold(0.0, (sum, s) => sum + s.additionalCost);
@@ -127,7 +129,7 @@ class SystemTask {
     String? author, String? assignee, DateTime? dueDate, DateTime? startDate, DateTime? endDate,
     String? location, List<TaskDocument>? documents, List<SubTask>? subTasks,
     List<RoadmapStep>? roadmapSteps, List<String>? subTaskIds, List<TaskComment>? comments, String? planId, String? projectId,
-    bool? isArchived,
+    bool? isArchived, bool? isApproved,
   }) {
     return SystemTask(
       id: id ?? this.id, taskNumber: taskNumber ?? this.taskNumber,
@@ -140,7 +142,7 @@ class SystemTask {
       documents: documents ?? this.documents, subTasks: subTasks ?? this.subTasks,
       roadmapSteps: roadmapSteps ?? this.roadmapSteps, subTaskIds: subTaskIds ?? this.subTaskIds,
       comments: comments ?? this.comments, planId: planId ?? this.planId, projectId: projectId ?? this.projectId,
-      isArchived: isArchived ?? this.isArchived,
+      isArchived: isArchived ?? this.isArchived, isApproved: isApproved ?? this.isApproved,
     );
   }
   Map<String, dynamic> toMap() {
@@ -162,31 +164,53 @@ class SystemTask {
       'planId': planId,
       'projectId': projectId,
       'isArchived': isArchived,
+      'isApproved': isApproved,
     };
   }
 
   factory SystemTask.fromMap(Map<String, dynamic> map) {
     return SystemTask(
       id: map['id']?.toString() ?? '',
-      taskNumber: map['taskNumber'] ?? '',
+      taskNumber: map['taskNumber']?.toString() ?? map['task_number']?.toString() ?? '',
       title: map['title'] ?? '',
       description: map['description'] ?? '',
-      status: TaskStatus.values[map['status'] ?? 0],
-      priority: TaskPriority.values[map['priority'] ?? 1],
-      allocatedCost: (map['allocatedCost'] ?? 0).toDouble(),
+      status: _parseStatus(map['status']),
+      priority: _parsePriority(map['priority']),
+      allocatedCost: (map['allocatedCost'] ?? map['allocated_cost'] ?? 0).toDouble(),
       author: map['author'] ?? 'Admin',
       assignee: map['assignee'] ?? 'Unassigned',
-      dueDate: map['dueDate'] != null ? DateTime.parse(map['dueDate']) : null,
-      startDate: map['startDate'] != null ? DateTime.parse(map['startDate']) : null,
-      endDate: map['endDate'] != null ? DateTime.parse(map['endDate']) : null,
+      dueDate: map['dueDate'] != null || map['due_date'] != null ? DateTime.parse(map['dueDate'] ?? map['due_date']) : null,
+      startDate: map['startDate'] != null || map['start_date'] != null ? DateTime.parse(map['startDate'] ?? map['start_date']) : null,
+      endDate: map['endDate'] != null || map['end_date'] != null ? DateTime.parse(map['endDate'] ?? map['end_date']) : null,
       location: map['location'] ?? '',
       comments: map['comments'] != null
           ? List<TaskComment>.from(map['comments'].map((x) => TaskComment.fromMap(x)))
           : [],
-      planId: map['planId']?.toString(),
-      projectId: map['projectId']?.toString(),
-      isArchived: _parseBool(map['isArchived'] ?? false),
+      planId: map['planId']?.toString() ?? map['plan_id']?.toString(),
+      projectId: map['projectId']?.toString() ?? map['project_id']?.toString(),
+      isArchived: _parseBool(map['isArchived'] ?? map['is_archived'] ?? false),
+      isApproved: _parseBool(map['isApproved'] ?? map['is_approved'] ?? true),
     );
+  }
+
+  static TaskStatus _parseStatus(dynamic val) {
+    if (val is int) return TaskStatus.values[val % TaskStatus.values.length];
+    if (val is String) {
+      final idx = int.tryParse(val);
+      if (idx != null) return TaskStatus.values[idx % TaskStatus.values.length];
+      return TaskStatus.values.firstWhere((e) => e.name == val, orElse: () => TaskStatus.todo);
+    }
+    return TaskStatus.todo;
+  }
+
+  static TaskPriority _parsePriority(dynamic val) {
+    if (val is int) return TaskPriority.values[val % TaskPriority.values.length];
+    if (val is String) {
+      final idx = int.tryParse(val);
+      if (idx != null) return TaskPriority.values[idx % TaskPriority.values.length];
+      return TaskPriority.values.firstWhere((e) => e.name == val, orElse: () => TaskPriority.medium);
+    }
+    return TaskPriority.medium;
   }
 
   static bool _parseBool(dynamic val) {

@@ -1059,14 +1059,23 @@ class _PremiumCompanyCard extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                // Archive button (admin only)
-                if (isAdmin)
-                  _SmallIconButton(
-                    icon: IconsaxPlusLinear.archive_add,
-                    isDark: isDark,
-                    tooltip: 'Move to Draft',
-                    onTap: () => _quickArchive(context, ref),
-                  ),
+                // Archive / Delete button
+                Builder(
+                  builder: (context) {
+                    final isManager = ref.watch(authProvider).role?.toUpperCase() == 'MANAGER';
+                    final canDelete = isAdmin || (isManager && company.status != CompanyStatus.active);
+
+                    if (!canDelete) return const SizedBox.shrink();
+
+                    return _SmallIconButton(
+                      icon: isAdmin ? IconsaxPlusLinear.archive_add : IconsaxPlusLinear.trash,
+                      isDark: isDark,
+                      isError: !isAdmin,
+                      tooltip: isAdmin ? 'Move to Draft' : 'Delete Request',
+                      onTap: () => _quickArchive(context, ref),
+                    );
+                  }
+                ),
               ],
             ),
           ],

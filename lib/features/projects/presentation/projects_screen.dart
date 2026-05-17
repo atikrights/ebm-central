@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../providers/project_provider.dart';
 import '../../workplace/providers/company_provider.dart';
 import '../../tasks/providers/task_provider.dart';
@@ -31,6 +32,8 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
+    final userRole = ref.watch(authProvider).role ?? '';
+    final canManageProjects = ['admin', 'sub_admin', 'manager', 'super_admin'].contains(userRole);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -100,13 +103,13 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: canManageProjects ? FloatingActionButton.extended(
         onPressed: () => _showAddProjectDialog(context),
         backgroundColor: AppColors.primary,
         elevation: 2,
         icon: const Icon(IconsaxPlusLinear.add_circle, color: Colors.white, size: 18),
         label: const Text('Create', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-      ).animate().scale(delay: 400.ms, curve: Curves.easeOutBack),
+      ).animate().scale(delay: 400.ms, curve: Curves.easeOutBack) : null,
     );
   }
 
@@ -906,6 +909,19 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
                 constraints: const BoxConstraints(),
               ),
               const SizedBox(width: 12),
+              if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role))
+                IconButton(
+                  onPressed: () {
+                    ref.read(projectProvider.notifier).approveProject(widget.project.id);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Project Approved'), backgroundColor: Colors.green));
+                  },
+                  icon: const Icon(IconsaxPlusLinear.tick_circle, size: 18, color: Colors.green),
+                  tooltip: 'Approve Project',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role))
+                const SizedBox(width: 12),
               IconButton(
                 onPressed: () => GoRouter.of(context).pushNamed('project_manage', pathParameters: {'id': widget.project.id}),
                 icon: Icon(IconsaxPlusLinear.eye, size: 18, color: widget.isDark ? Colors.white38 : Colors.black38),
@@ -1021,6 +1037,18 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
                   constraints: const BoxConstraints(),
                 ),
                 const SizedBox(width: 8),
+                 if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role))
+                  IconButton(
+                    onPressed: () {
+                      ref.read(projectProvider.notifier).approveProject(widget.project.id);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Project Approved'), backgroundColor: Colors.green));
+                    },
+                    icon: const Icon(IconsaxPlusLinear.tick_circle, size: 18, color: Colors.green),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                 if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role))
+                  const SizedBox(width: 8),
                  IconButton(
                   onPressed: () => GoRouter.of(context).pushNamed('project_manage', pathParameters: {'id': widget.project.id}),
                   icon: Icon(IconsaxPlusLinear.eye, size: 18, color: widget.isDark ? Colors.white38 : Colors.black38),
@@ -1182,6 +1210,25 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
   }
 
   Widget _statusBadge(ProjectStatus status, Color color) {
+    if (!widget.project.isApproved) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.orangeAccent.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.orangeAccent.withOpacity(0.3)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(IconsaxPlusBold.timer_1, size: 12, color: Colors.orangeAccent),
+            SizedBox(width: 4),
+            Text('PENDING', style: TextStyle(color: Colors.orangeAccent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+          ],
+        ),
+      );
+    }
+
     IconData icon;
     switch (status) {
       case ProjectStatus.active: icon = IconsaxPlusBold.flash; break;

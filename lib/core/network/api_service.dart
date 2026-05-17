@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 
-// ─── ApiService Provider ───────────────────────────────────────────────────
+// ─── ApiService Provider ────────────────-----------------------------------
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
 
 /// EBM Central API Service
@@ -26,20 +27,50 @@ class ApiService {
   // ─── Default Security Headers ─────────────────────────────────────────────
   // 'X-EBM-Client' lets the backend log which platform made the request.
   // 'X-Requested-With' prevents CSRF from simple HTML form attacks.
-  Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-EBM-Client': 'ebm-central-flutter',
-        'X-Requested-With': 'XMLHttpRequest',
-        if (token != null) 'Authorization': 'Bearer $token',
-      };
+  Map<String, String> _buildHeaders(String endpoint, [dynamic body]) {
+    final base = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+      if (token != null && !token!.codeUnits.any((char) => char < 32 || char > 126)) 
+        'Authorization': 'Bearer $token',
+    };
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final timestampStr = timestamp.toString();
+    final clientId = 'ebm-central-flutter';
+    final secret = 'ebm_central_secure_secret_key_456';
+
+    String content = '';
+    if (body != null) {
+      if (body is Map || body is List) {
+        content = json.encode(body);
+      } else {
+        content = body.toString();
+      }
+    }
+
+    final fullUrl = '$baseUrl$endpoint';
+    final dataToSign = '$fullUrl|$timestampStr|$content';
+
+    final keyBytes = utf8.encode(secret);
+    final dataBytes = utf8.encode(dataToSign);
+    final hmac = Hmac(sha256, keyBytes);
+    final signature = hmac.convert(dataBytes).toString();
+
+    base['X-EBM-Client'] = clientId;
+    base['X-EBM-Timestamp'] = timestampStr;
+    base['X-EBM-Signature'] = signature;
+
+    return base;
+  }
 
   // ─── GET ─────────────────────────────────────────────────────────────────
   Future<dynamic> get(String endpoint) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl$endpoint'),
-        headers: _headers,
+        headers: _buildHeaders(endpoint),
       );
       return _handleResponse(response);
     } on http.ClientException catch (e) {
@@ -52,7 +83,7 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl$endpoint'),
-        headers: _headers,
+        headers: _buildHeaders(endpoint, data),
         body: json.encode(data),
       );
       return _handleResponse(response);
@@ -66,7 +97,7 @@ class ApiService {
     try {
       final response = await http.put(
         Uri.parse('$baseUrl$endpoint'),
-        headers: _headers,
+        headers: _buildHeaders(endpoint, data),
         body: json.encode(data),
       );
       return _handleResponse(response);
@@ -80,7 +111,21 @@ class ApiService {
     try {
       final response = await http.delete(
         Uri.parse('$baseUrl$endpoint'),
-        headers: _headers,
+        headers: _buildHeaders(endpoint),
+      );
+      return _handleResponse(response);
+    } on http.ClientException catch (e) {
+      throw ApiException('Network error: ${e.message}', statusCode: 0);
+    }
+  }
+
+  // ─── PATCH ────────────────────────────────────────────────────────────────
+  Future<dynamic> patch(String endpoint, [Map<String, dynamic>? data]) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: _buildHeaders(endpoint, data),
+        body: data != null ? json.encode(data) : null,
       );
       return _handleResponse(response);
     } on http.ClientException catch (e) {
@@ -130,7 +175,7 @@ class ApiService {
   Future<dynamic> postMultipart(String endpoint, Map<String, String> fields, List<http.MultipartFile> files) async {
     try {
       final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$endpoint'));
-      request.headers.addAll(_headers);
+      request.headers.addAll(_buildHeaders(endpoint, fields));
       request.headers['Content-Type'] = 'multipart/form-data';
       request.fields.addAll(fields);
       request.files.addAll(files);

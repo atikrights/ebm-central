@@ -5,19 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_config.dart';
 import 'chat_models.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../../core/auth/auth_provider.dart';
 
 final chatServiceProvider = Provider<ChatService>((ref) {
-  return ChatService(baseUrl: AppConfig.baseUrl);
+  return ChatService(baseUrl: AppConfig.baseUrl, ref: ref);
 });
 
 class ChatService {
   final String baseUrl;
+  final Ref ref;
 
-  ChatService({required this.baseUrl});
+  ChatService({required this.baseUrl, required this.ref});
 
   Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('auth_token');
+    return ref.read(authProvider).token;
   }
 
   // ── Chat Profile ────────────────────────────────────────────────────────
@@ -32,8 +33,7 @@ class ChatService {
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else if (response.statusCode == 401) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('auth_token');
+      ref.read(authProvider.notifier).logout();
       throw Exception('Session expired. Please logout and login again.');
     } else {
       throw Exception('Failed to load profile: ${response.statusCode}');

@@ -17,6 +17,18 @@ class Project {
   final Color brandColor;
   final List<String> taskIds;
   final List<Plan> plans;
+  final bool isApproved;
+
+  final double minBudget;
+  final double maxBudget;
+  final String managerSignature;
+  final DateTime? managerSignatureTimestamp;
+  final String founderSignature;
+  final DateTime? founderSignatureTimestamp;
+  final double? confirmedBudget;
+  final String website;
+  final String coverPhotoUrl;
+  final String inspirationText;
 
   Project({
     required this.id,
@@ -33,25 +45,61 @@ class Project {
     required this.brandColor,
     this.taskIds = const [],
     this.plans = const [],
+    this.isApproved = true,
+    this.minBudget = 0.0,
+    this.maxBudget = 0.0,
+    this.managerSignature = '',
+    this.managerSignatureTimestamp,
+    this.founderSignature = '',
+    this.founderSignatureTimestamp,
+    this.confirmedBudget,
+    this.website = '',
+    this.coverPhotoUrl = '',
+    this.inspirationText = '',
   });
 
   factory Project.fromMap(Map<String, dynamic> map) {
     return Project(
       id: map['id']?.toString() ?? '',
-      companyId: map['company_id']?.toString(),
-      companyName: map['company']?['name']?.toString(),
+      companyId: map['company_id']?.toString() ?? map['companyId']?.toString(),
+      companyName: map['company']?['name']?.toString() ?? map['companyName']?.toString(),
       pid: map['pid'] ?? '',
       name: map['name'] ?? '',
       category: map['category'] ?? 'General',
       description: map['description'] ?? '',
       status: _parseStatus(map['status']),
-      totalBudget: (map['total_budget'] ?? 0).toDouble(),
-      consumedBudget: (map['consumed_budget'] ?? 0).toDouble(),
-      startDate: DateTime.parse(map['start_date'] ?? DateTime.now().toIso8601String()),
-      brandColor: _parseColor(map['brand_color']),
-      taskIds: List<String>.from(map['task_ids'] ?? []),
+      totalBudget: (map['total_budget'] ?? map['totalBudget'] ?? 0).toDouble(),
+      consumedBudget: (map['consumed_budget'] ?? map['consumedBudget'] ?? 0).toDouble(),
+      startDate: DateTime.parse(map['start_date'] ?? map['startDate'] ?? DateTime.now().toIso8601String()),
+      brandColor: _parseColor(map['brand_color'] ?? map['brandColor']),
+      taskIds: List<String>.from(map['task_ids'] ?? map['taskIds'] ?? []),
       plans: List<Plan>.from((map['plans'] as List? ?? []).map((p) => Plan.fromMap(p))),
+      isApproved: _parseBool(map['is_approved'] ?? map['isApproved']),
+      minBudget: (map['min_budget'] ?? map['minBudget'] ?? 0.0).toDouble(),
+      maxBudget: (map['max_budget'] ?? map['maxBudget'] ?? 0.0).toDouble(),
+      managerSignature: map['manager_signature'] ?? map['managerSignature'] ?? '',
+      managerSignatureTimestamp: (map['manager_signature_timestamp'] ?? map['managerSignatureTimestamp']) != null 
+          ? DateTime.parse(map['manager_signature_timestamp'] ?? map['managerSignatureTimestamp']) : null,
+      founderSignature: map['founder_signature'] ?? map['founderSignature'] ?? '',
+      founderSignatureTimestamp: (map['founder_signature_timestamp'] ?? map['founderSignatureTimestamp']) != null 
+          ? DateTime.parse(map['founder_signature_timestamp'] ?? map['founderSignatureTimestamp']) : null,
+      confirmedBudget: (map['confirmed_budget'] ?? map['confirmedBudget']) != null 
+          ? (map['confirmed_budget'] ?? map['confirmedBudget'] as num).toDouble() : null,
+      website: map['website'] ?? map['website_url'] ?? '',
+      coverPhotoUrl: map['cover_photo_url'] ?? map['coverPhotoUrl'] ?? '',
+      inspirationText: map['inspiration_text'] ?? map['inspirationText'] ?? '',
     );
+  }
+
+  static bool _parseBool(dynamic val) {
+    if (val == null) return true;
+    if (val is bool) return val;
+    if (val is int) return val == 1;
+    if (val is String) {
+      final s = val.toLowerCase();
+      return s == 'true' || s == '1' || s == 'yes' || s == 'active';
+    }
+    return false;
   }
 
   static ProjectStatus _parseStatus(dynamic status) {

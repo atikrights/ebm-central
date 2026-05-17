@@ -44,6 +44,7 @@ import '../../features/mail/presentation/mail_settings_screen.dart';
 import '../../features/mail/presentation/mail_automation_screen.dart';
 import '../../features/workplace/presentation/company_screen.dart';
 import '../../features/chat/presentation/chat_dashboard_screen.dart';
+import '../../features/governance/presentation/authority_matrix_screen.dart';
 import 'dart:async';
 
 
@@ -176,6 +177,7 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     const Scaffold(body: Center(child: Text('Icon Library', style: TextStyle(color: Colors.grey)))), // Index 43
     ChatSettingsScreen(), // Index 44: Chat Settings
     ChatDashboardScreen(), // Index 45: Chat Dashboard
+    const AuthorityMatrixScreen(), // Index 46: User Role & Permissions
   ];
 
   static const Map<int, String> _indexToPath = {
@@ -193,6 +195,7 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     41: '/teams-manage',
     42: '/teams-control',
     43: '/icons',
+    46: '/user-role',
   };
 
   void _onNavTap(int index) {
@@ -768,8 +771,9 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                       isDark: isDark,
                       subItems: [
                         _SubMenuItem(index: 33, label: 'All Users', icon: Icons.group_outlined),
+                        _SubMenuItem(index: 46, label: 'User Role', icon: Icons.admin_panel_settings_rounded),
                         _SubMenuItem(index: 41, label: 'Teams', icon: Icons.group_work_rounded),
-                        _SubMenuItem(index: 42, label: 'Teams Control', icon: Icons.admin_panel_settings_rounded),
+                        _SubMenuItem(index: 42, label: 'Teams Control', icon: Icons.shield_rounded),
                       ],
                     ),
                   
