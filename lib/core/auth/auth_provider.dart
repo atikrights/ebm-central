@@ -253,10 +253,12 @@ class AuthNotifier extends Notifier<AuthState> {
       final String role = userData['role'];
       final String name = userData['name'];
 
-      if (role.toUpperCase() != 'ADMIN' && role.toUpperCase() != 'SUPER_ADMIN') {
+      // EBM Central: super_admin, admin, sub_admin only (matches backend AuthController guard)
+      final allowedRoles = ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'];
+      if (!allowedRoles.contains(role.toUpperCase())) {
         state = state.copyWith(
           isLoading: false,
-          error: 'Access Denied! Only Administrators can access EBM Central.',
+          error: 'Access Denied! EBM Central is restricted to Administrators only.',
         );
         return;
       }

@@ -13,6 +13,7 @@ import '../../features/projects/presentation/single_project_manage_screen.dart';
 import '../../features/teams/presentation/teams_screen.dart';
 import '../../features/teams/presentation/teams_control_screen.dart';
 import '../../features/governance/presentation/authority_matrix_screen.dart';
+import '../../features/projects/presentation/project_recycle_bin_screen.dart';
 import '../../shared/widgets/window_title_bar.dart';
 import 'dart:io' if (dart.library.html) 'package:frontend/core/utils/io_stub.dart';
 import 'package:flutter/foundation.dart';
@@ -104,6 +105,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/projects',
             name: 'projects',
             builder: (context, state) => const AppLayout(initialIndex: 37),
+          ),
+
+          GoRoute(
+            path: '/projects/recycle-bin',
+            name: 'project_recycle_bin',
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const ProjectRecycleBinScreen(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+            ),
           ),
 
           GoRoute(

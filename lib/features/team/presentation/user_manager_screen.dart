@@ -133,31 +133,39 @@ class _UserManagerScreenState extends ConsumerState<UserManagerScreen> with Sing
   Widget _buildAllUsersView() {
     final usersAsync = ref.watch(userListProvider);
     final auth = ref.watch(authProvider);
-    final bool isSuperAdmin = auth.role == 'SUPER_ADMIN' || auth.role == 'SUPER ADMIN';
     
     return usersAsync.when(
       data: (users) {
-        List<dynamic> filteredUsers = users;
+        // Collect all unique roles present in the user list to build dynamic filters
+        final Map<String, int> roleCounts = {"ALL": users.length};
         
-        // Custom filtering logic for Acting Roles
-        if (_activeFilter == "SUB_ADMIN") {
-          filteredUsers = users.where((u) {
-            final teams = u['teams'] as List? ?? [];
-            return teams.any((t) => t['pivot']?['role'] == 'sub_admin');
-          }).toList();
-        } else if (_activeFilter != "All") {
-          filteredUsers = users.where((u) => u['role'].toString().toUpperCase() == _activeFilter.toUpperCase()).toList();
+        // Count base roles dynamically
+        for (var u in users) {
+          final String rawRole = (u['role'] ?? 'STAFF').toString().toUpperCase().replaceAll(' ', '_');
+          roleCounts[rawRole] = (roleCounts[rawRole] ?? 0) + 1;
         }
 
-        final int totalCount = users.length;
-        final int superAdminCount = users.where((u) => u['role'].toString().toUpperCase() == 'SUPER_ADMIN').length;
-        final int adminCount = users.where((u) => u['role'].toString().toUpperCase() == 'ADMIN').length;
-        final int managerCount = users.where((u) => u['role'].toString().toUpperCase() == 'MANAGER').length;
-        final int staffCount = users.where((u) => u['role'].toString().toUpperCase() == 'STAFF').length;
+        // Count acting sub_admin role
         final int subAdminCount = users.where((u) {
           final teams = u['teams'] as List? ?? [];
           return teams.any((t) => t['pivot']?['role'] == 'sub_admin');
         }).length;
+        if (subAdminCount > 0) {
+          roleCounts["SUB_ADMIN"] = subAdminCount;
+        }
+
+        // Filter the users based on selected filter
+        List<dynamic> filteredUsers = users;
+        if (_activeFilter.toUpperCase() == "SUB_ADMIN") {
+          filteredUsers = users.where((u) {
+            final teams = u['teams'] as List? ?? [];
+            return teams.any((t) => t['pivot']?['role'] == 'sub_admin');
+          }).toList();
+        } else if (_activeFilter != "All" && _activeFilter != "ALL") {
+          filteredUsers = users.where((u) => u['role'].toString().toUpperCase().replaceAll(' ', '_') == _activeFilter.toUpperCase()).toList();
+        }
+
+        final List<MapEntry<String, int>> filterEntries = roleCounts.entries.toList();
 
         return RefreshIndicator(
           onRefresh: () => ref.read(userListProvider.notifier).fetchUsers(),
@@ -167,25 +175,25 @@ class _UserManagerScreenState extends ConsumerState<UserManagerScreen> with Sing
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Text-based Filter Row (Super Admin Style)
+                // Dynamic Text-based Filter Row
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: [
-                      _buildTextFilter("All", totalCount),
-                      if (isSuperAdmin) ...[
-                        _buildFilterDivider(),
-                        _buildTextFilter("SUPER_ADMIN", superAdminCount),
-                        _buildFilterDivider(),
-                        _buildTextFilter("ADMIN", adminCount),
-                        _buildFilterDivider(),
-                        _buildTextFilter("SUB_ADMIN", subAdminCount),
-                      ],
-                      _buildFilterDivider(),
-                      _buildTextFilter("MANAGER", managerCount),
-                      _buildFilterDivider(),
-                      _buildTextFilter("STAFF", staffCount),
-                    ],
+                    children: filterEntries.asMap().entries.map((entry) {
+                      final int index = entry.key;
+                      final MapEntry<String, int> filter = entry.value;
+                      final String roleKey = filter.key;
+                      final int count = filter.value;
+                      final bool isLast = index == filterEntries.length - 1;
+                      
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildTextFilter(roleKey == "ALL" ? "All" : roleKey, count),
+                          if (!isLast) _buildFilterDivider(),
+                        ],
+                      );
+                    }).toList(),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -359,7 +367,7 @@ class _UserManagerScreenState extends ConsumerState<UserManagerScreen> with Sing
           // Email Column
           SizedBox(width: 220, child: Text(email, style: const TextStyle(fontSize: 13, color: AdminTheme.primary), overflow: TextOverflow.ellipsis)),
           
-          // Role Column (Original Role + Acting Badge)
+          // Role Column (Original Role + Custom Roles + Acting Badge)
           SizedBox(
             width: 120, 
             child: Column(
@@ -377,6 +385,20 @@ class _UserManagerScreenState extends ConsumerState<UserManagerScreen> with Sing
                     ),
                     child: Text("ACTING: SUB-ADMIN", style: const TextStyle(fontSize: 7, color: Colors.blueAccent, fontWeight: FontWeight.w900)),
                   ),
+                ...((user['custom_roles'] as List? ?? []).map((cr) {
+                  final String crLabel = (cr['label'] ?? cr['name'] ?? '').toString().toUpperCase();
+                  if (crLabel.isEmpty) return const SizedBox.shrink();
+                  return Container(
+                    margin: const EdgeInsets.only(top: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AdminTheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: AdminTheme.primary.withOpacity(0.2)),
+                    ),
+                    child: Text(crLabel, style: const TextStyle(fontSize: 7, color: AdminTheme.primary, fontWeight: FontWeight.w900)),
+                  );
+                }).toList()),
               ],
             )
           ),

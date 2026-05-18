@@ -8,7 +8,9 @@ import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
 import 'package:frontend/core/network/api_service.dart';
 import 'package:frontend/features/chat/data/websocket_service.dart';
 import 'package:frontend/features/governance/presentation/approval_center_screen.dart';
-
+import 'package:frontend/features/projects/providers/project_provider.dart';
+import 'package:frontend/features/projects/models/project.dart';
+import 'package:frontend/features/tasks/providers/task_provider.dart';
 
 // ─── Data Models ────────────────────────────────────────────────────────────
 
@@ -341,10 +343,11 @@ class _TeamsScreenState extends ConsumerState<TeamsScreen> {
                                   _buildTeamColumn('Admins & Sub-Admins', team.authorities, context, team.id),
                                   const SizedBox(height: 16),
                                   _buildTeamColumn('Managers', team.managers, context, team.id),
-                                  const SizedBox(height: 16),
                                   _buildTeamColumn('Staff', team.staff, context, team.id),
                                 ],
                               ),
+                          const SizedBox(height: 24),
+                          _buildTeamProjectsAndTasks(team, context, ref),
                           const SizedBox(height: 48),
                         ],
                       );
@@ -542,6 +545,80 @@ class _TeamsScreenState extends ConsumerState<TeamsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTeamProjectsAndTasks(Team team, BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final projectState = ref.watch(projectProvider);
+    final taskState = ref.watch(taskProvider);
+
+    final companyIds = team.companies.map((c) => c.id.toString()).toSet();
+    
+    int projectCount = 0;
+    int taskCount = 0;
+
+    projectState.whenData((projects) {
+      final teamProjects = projects.where((p) => companyIds.contains(p.companyId)).toList();
+      projectCount = teamProjects.length;
+      
+      final teamProjectIds = teamProjects.map((p) => p.id).toSet();
+      taskCount = taskState.allTasks.where((t) => teamProjectIds.contains(t.projectId)).length;
+    });
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.03) : Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.05)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.indigo.withOpacity(0.1), shape: BoxShape.circle),
+                  child: const Icon(Icons.folder_shared_rounded, color: Colors.indigo),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Attached Projects', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.indigo)),
+                    const SizedBox(height: 4),
+                    Text('$projectCount Project${projectCount != 1 ? 's' : ''} in Team View', style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black54)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Container(height: 40, width: 1, color: isDark ? Colors.white10 : Colors.black12, margin: const EdgeInsets.symmetric(horizontal: 24)),
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.teal.withOpacity(0.1), shape: BoxShape.circle),
+                  child: const Icon(Icons.task_alt_rounded, color: Colors.teal),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Team Tasks', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.teal)),
+                    const SizedBox(height: 4),
+                    Text('$taskCount Active Task${taskCount != 1 ? 's' : ''}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black54)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

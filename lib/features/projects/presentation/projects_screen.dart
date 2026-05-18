@@ -12,6 +12,7 @@ import '../providers/project_provider.dart';
 import '../../workplace/providers/company_provider.dart';
 import '../../tasks/providers/task_provider.dart';
 import '../models/project.dart';
+import 'project_approval_dashboard.dart';
 
 class ProjectsScreen extends ConsumerStatefulWidget {
   const ProjectsScreen({super.key});
@@ -24,7 +25,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedFilter = 'All';
-  final List<String> _filters = ['All', 'Active', 'Hold', 'Complete'];
+  final List<String> _filters = ['All', 'Active', 'Hold', 'Complete', 'Pending'];
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +34,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     final isDark = theme.brightness == Brightness.dark;
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
     final userRole = ref.watch(authProvider).role ?? '';
-    final canManageProjects = ['admin', 'sub_admin', 'manager', 'super_admin'].contains(userRole);
+    final canManageProjects = ['admin', 'sub_admin', 'manager', 'super_admin'].contains(userRole.toLowerCase());
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -64,7 +65,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                       p.pid.toLowerCase().contains(sq) ||
                       (p.companyName ?? '').toLowerCase().contains(sq) ||
                       (p.companyId ?? '').toLowerCase().contains(sq);
-                  
+
                   bool matchesFilter = false;
                   if (_selectedFilter == 'All') {
                     matchesFilter = true;
@@ -74,13 +75,32 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                     matchesFilter = p.status == ProjectStatus.completed;
                   } else if (_selectedFilter == 'Hold') {
                     matchesFilter = p.status == ProjectStatus.onHold;
+                  } else if (_selectedFilter == 'Pending') {
+                    matchesFilter = !p.isApproved;
                   }
-                  
+
                   return matchesSearch && matchesFilter;
                 }).toList();
 
                 if (filteredProjects.isEmpty) {
+                  // Show approval dashboard when Pending filter is selected and empty
+                  if (_selectedFilter == 'Pending') {
+                    return const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: ProjectApprovalDashboard(),
+                    );
+                  }
                   return _buildEmptyState(isDark);
+                }
+
+                // For Pending filter, show approval dashboard on top
+                if (_selectedFilter == 'Pending') {
+                  return const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: SingleChildScrollView(
+                      child: ProjectApprovalDashboard(),
+                    ),
+                  );
                 }
 
                 return LayoutBuilder(
@@ -104,6 +124,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
         ],
       ),
       floatingActionButton: canManageProjects ? FloatingActionButton.extended(
+        heroTag: 'create_project',
         onPressed: () => _showAddProjectDialog(context),
         backgroundColor: AppColors.primary,
         elevation: 2,
@@ -114,28 +135,54 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   }
 
   Widget _buildTopBanner(bool isDark) {
+    final isSuperAdmin = ref.watch(authProvider).role?.toLowerCase() == 'super_admin';
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 40, 24, 0),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Projects Registry',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -1.5,
-              color: isDark ? Colors.white : Colors.black87,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Projects Registry',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -1.5,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Monitor and deploy strategic company assets.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Monitor and deploy strategic company assets.',
-            style: TextStyle(
-              fontSize: 14,
-              color: isDark ? Colors.white38 : Colors.black38,
-            ),
-          ),
+          
+          if (isSuperAdmin) ...[
+            const SizedBox(width: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+              ),
+              child: IconButton(
+                padding: const EdgeInsets.all(12),
+                tooltip: 'Recycle Bin',
+                onPressed: () => context.push('/projects/recycle-bin'),
+                icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 24),
+              ),
+            ).animate().fadeIn().scale(delay: 100.ms),
+          ]
         ],
       ),
     );
@@ -178,6 +225,8 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
             count = allProjects.where((p) => p.status == ProjectStatus.completed).length;
           } else if (filter == 'Hold') {
             count = allProjects.where((p) => p.status == ProjectStatus.onHold).length;
+          } else if (filter == 'Pending') {
+            count = allProjects.where((p) => !p.isApproved).length;
           }
 
           return Padding(
@@ -189,12 +238,15 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isSelected 
-                    ? AppColors.primary 
+                  color: isSelected
+                    ? (filter == 'Pending' ? const Color(0xFFF59E0B) : AppColors.primary)
                     : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02)),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isSelected ? Colors.transparent : (isDark ? Colors.white10 : Colors.black.withOpacity(0.05))
+                    color: isSelected ? Colors.transparent
+                      : (filter == 'Pending' && count > 0
+                          ? const Color(0xFFF59E0B).withOpacity(0.4)
+                          : (isDark ? Colors.white10 : Colors.black.withOpacity(0.05)))
                   ),
                 ),
                 child: Row(
@@ -332,6 +384,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   void _showAddProjectDialog(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final nameCtrl = TextEditingController();
+    String? selectedCompanyId;
     bool isCreating = false;
     Project? createdProject;
 
@@ -342,6 +395,8 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
           if (createdProject != null) {
             return _buildSuccessDialog(ctx, createdProject!, isDark);
           }
+
+          final companies = ref.read(companyProvider).value?.companies ?? [];
 
           return AlertDialog(
             backgroundColor: Colors.transparent,
@@ -361,7 +416,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                 ],
               ),
               child: SizedBox(
-                width: 320,
+                width: 360,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,65 +424,150 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Deploy Project', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: -0.5, color: isDark ? Colors.white : Colors.black87)),
+                        Text('Deploy Project',
+                            style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.5,
+                                color: isDark ? Colors.white : Colors.black87)),
                         IconButton(
-                          onPressed: () => Navigator.pop(ctx), 
-                          icon: Icon(Icons.close, size: 18, color: isDark ? Colors.white54 : Colors.black54),
+                          onPressed: () => Navigator.pop(ctx),
+                          icon: Icon(Icons.close,
+                              size: 18,
+                              color: isDark ? Colors.white54 : Colors.black54),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 24),
-                    
+                    const SizedBox(height: 20),
+
                     _buildFieldLabel('PROJECT NAME', isDark),
                     const SizedBox(height: 8),
                     _buildDialogField(nameCtrl, 'Enter project name...', IconsaxPlusLinear.edit_2, isDark),
-                    
-                    const SizedBox(height: 32),
+
+                    const SizedBox(height: 16),
+
+                    // ── Optional Company Attachment ──────────────────────
+                    _buildFieldLabel('ATTACH TO COMPANY (OPTIONAL)', isDark),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String?>(
+                          value: selectedCompanyId,
+                          isExpanded: true,
+                          dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                          hint: Text('— None (Private workspace)',
+                              style: TextStyle(
+                                  color: isDark ? Colors.white38 : Colors.black38,
+                                  fontSize: 12)),
+                          style: TextStyle(
+                              color: isDark ? Colors.white : Colors.black87,
+                              fontSize: 13),
+                          items: [
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('— None (Private workspace)',
+                                  style: TextStyle(
+                                      color: Colors.grey, fontSize: 12)),
+                            ),
+                            ...companies.map((c) => DropdownMenuItem<String?>(
+                                  value: c.id,
+                                  child: Text(c.name),
+                                )),
+                          ],
+                          onChanged: (val) =>
+                              setDialogState(() => selectedCompanyId = val),
+                        ),
+                      ),
+                    ),
+
+                    // Info hint
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, bottom: 16),
+                      child: Text(
+                        selectedCompanyId == null
+                            ? '🔒 Project will be private until attached to a company.'
+                            : '🔗 Project will be visible to the selected company\'s team.',
+                        style: TextStyle(
+                            color: selectedCompanyId == null
+                                ? Colors.white38
+                                : const Color(0xFF3B82F6),
+                            fontSize: 11),
+                      ),
+                    ),
+
                     SizedBox(
                       width: double.infinity,
                       height: 44,
                       child: ElevatedButton(
-                        onPressed: isCreating ? null : () async {
-                          if (nameCtrl.text.isNotEmpty) {
-                            setDialogState(() => isCreating = true);
-                            try {
-                              final result = await ref.read(projectProvider.notifier).createProject(
-                                name: nameCtrl.text.trim(),
-                                companyId: null,
-                                category: 'General',
-                                status: ProjectStatus.draft,
-                              );
-                              
-                              if (result != null) {
-                                setDialogState(() {
-                                  createdProject = result;
-                                  isCreating = false;
-                                });
-                              } else {
-                                setDialogState(() => isCreating = false);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Failed to create project.'), backgroundColor: Colors.red),
-                                );
-                              }
-                            } catch (e) {
-                              setDialogState(() => isCreating = false);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red),
-                              );
-                            }
-                          }
-                        },
+                        onPressed: isCreating
+                            ? null
+                            : () async {
+                                if (nameCtrl.text.isNotEmpty) {
+                                  setDialogState(() => isCreating = true);
+                                  try {
+                                    final result = await ref
+                                        .read(projectProvider.notifier)
+                                        .createProject(
+                                          name: nameCtrl.text.trim(),
+                                          companyId: selectedCompanyId,
+                                          category: 'General',
+                                          status: ProjectStatus.draft,
+                                        );
+
+                                    if (result != null) {
+                                      setDialogState(() {
+                                        createdProject = result;
+                                        isCreating = false;
+                                      });
+                                    } else {
+                                      setDialogState(() => isCreating = false);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                              content: Text('Failed to create project.'),
+                                              backgroundColor: Colors.red),
+                                        );
+                                      }
+                                    }
+                                  } catch (e) {
+                                    setDialogState(() => isCreating = false);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                            content: Text('Error: ${e.toString()}'),
+                                            backgroundColor: Colors.red),
+                                      );
+                                    }
+                                  }
+                                }
+                              },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
                           elevation: 0,
                         ),
-                        child: isCreating 
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : const Text('CREATE PROJECT', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2, fontSize: 12)),
+                        child: isCreating
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2))
+                            : const Text('CREATE PROJECT',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.2,
+                                    fontSize: 12)),
                       ),
                     ),
                   ],
@@ -909,7 +1049,7 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
                 constraints: const BoxConstraints(),
               ),
               const SizedBox(width: 12),
-              if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role))
+              if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role?.toLowerCase()))
                 IconButton(
                   onPressed: () {
                     ref.read(projectProvider.notifier).approveProject(widget.project.id);
@@ -920,7 +1060,7 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
-              if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role))
+              if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role?.toLowerCase()))
                 const SizedBox(width: 12),
               IconButton(
                 onPressed: () => GoRouter.of(context).pushNamed('project_manage', pathParameters: {'id': widget.project.id}),
@@ -1037,7 +1177,7 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
                   constraints: const BoxConstraints(),
                 ),
                 const SizedBox(width: 8),
-                 if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role))
+                 if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role?.toLowerCase()))
                   IconButton(
                     onPressed: () {
                       ref.read(projectProvider.notifier).approveProject(widget.project.id);
@@ -1047,7 +1187,7 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
-                 if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role))
+                 if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role?.toLowerCase()))
                   const SizedBox(width: 8),
                  IconButton(
                   onPressed: () => GoRouter.of(context).pushNamed('project_manage', pathParameters: {'id': widget.project.id}),
@@ -1134,9 +1274,9 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(IconsaxPlusLinear.link, size: 12, color: Colors.redAccent),
+              Icon(IconsaxPlusLinear.lock, size: 12, color: Colors.redAccent),
               SizedBox(width: 6),
-              Text('Unlinked', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.w900)),
+              Text('Own Scope', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.w900)),
             ],
           ),
         ),
@@ -1157,7 +1297,7 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
           const SizedBox(width: 6),
           Flexible(
             child: Text(
-              widget.project.companyName ?? 'Linked',
+              'Team View: ${widget.project.companyName ?? 'Linked'}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(

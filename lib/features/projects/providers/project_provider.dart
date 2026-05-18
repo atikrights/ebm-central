@@ -36,7 +36,6 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
         } else {
           dataList = [];
         }
-        
         final projects = dataList.map((p) => Project.fromMap(p as Map<String, dynamic>)).toList();
         state = AsyncValue.data(projects);
       } else {
@@ -45,6 +44,59 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
+  }
+
+  /// Super Admin: fetch ALL projects including private/unattached from every user.
+  Future<List<Project>> fetchAllProjects() async {
+    try {
+      final response = await _api.get('/projects?all=true');
+      if (response != null) {
+        final List dataList = response is List ? response
+            : (response is Map && response['data'] is List ? response['data'] : []);
+        final all = dataList.map((p) => Project.fromMap(p as Map<String, dynamic>)).toList();
+        state = AsyncValue.data(all); // update state so UI reflects
+        return all;
+      }
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+    return [];
+  }
+
+  /// Fetch all soft-deleted (trashed) projects. Super Admin only.
+  Future<List<Project>> fetchTrashedProjects() async {
+    try {
+      final response = await _api.get('/projects/trashed');
+      if (response != null) {
+        final List dataList = response is List ? response
+            : (response is Map && response['data'] is List ? response['data'] : []);
+        return dataList.map((p) => Project.fromMap(p as Map<String, dynamic>)).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Restore a soft-deleted project. Super Admin only.
+  Future<bool> restoreTrashedProject(String projectId) async {
+    try {
+      final response = await _api.post('/projects/$projectId/restore', {});
+      if (response != null) {
+        await fetchProjects();
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  /// Permanently delete a project. Super Admin only.
+  Future<bool> forceDeleteProject(String projectId) async {
+    try {
+      final response = await _api.delete('/projects/$projectId/force-delete');
+      if (response != null) {
+        return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   Future<void> _backgroundFetch() async {
@@ -60,7 +112,9 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
           dataList = [];
         }
         final projects = dataList.map((p) => Project.fromMap(p as Map<String, dynamic>)).toList();
-        state = AsyncValue.data(projects);
+        if (mounted) {
+          state = AsyncValue.data(projects);
+        }
       }
     } catch (_) {}
   }
@@ -94,7 +148,7 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
 
   Future<void> linkCompanyToProject(String projectId, String companyId) async {
     try {
-      await _api.put('/projects/$projectId', {
+      await _api.post('/projects/$projectId/attach-company', {
         'company_id': companyId,
       });
       await fetchProjects();
@@ -103,11 +157,67 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
     }
   }
 
+  /// Batch attach multiple projects to a company (Method 1: from Company page)
+  Future<List<Map<String, dynamic>>> batchAttachToCompany(
+      String companyId, List<String> projectIds) async {
+    try {
+      final response = await _api.post(
+        '/companies/$companyId/attach-projects',
+        {'project_ids': projectIds},
+      );
+      await fetchProjects();
+      if (response != null && response['results'] != null) {
+        return List<Map<String, dynamic>>.from(response['results']);
+      }
+    } catch (e) {
+      rethrow;
+    }
+    return [];
+  }
+
+  /// Detach a project from its company — returns to creator's private scope
+  Future<void> detachCompanyFromProject(String projectId) async {
+    try {
+      await _api.post('/projects/$projectId/detach-company', {});
+      await fetchProjects();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Approve a pending project (Admin / Sub-Admin only)
   Future<void> approveProject(String projectId) async {
     try {
-      await _api.put('/projects/$projectId', {'is_approved': true});
+      await _api.post('/projects/$projectId/approve', {'is_approved': true});
       await fetchProjects();
     } catch (e) { rethrow; }
+  }
+
+  /// Reject / un-approve a project (Admin / Sub-Admin only)
+  Future<void> rejectProject(String projectId) async {
+    try {
+      await _api.post('/projects/$projectId/approve', {'is_approved': false});
+      await fetchProjects();
+    } catch (e) { rethrow; }
+  }
+
+  /// Fetch all unattached projects for the picker modal
+  Future<List<Project>> fetchUnattachedProjects() async {
+    try {
+      final response = await _api.get('/projects/unattached');
+      if (response != null) {
+        final List dataList = response is List ? response
+            : (response is Map && response['data'] is List ? response['data'] : []);
+        return dataList.map((p) => Project.fromMap(p as Map<String, dynamic>)).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Get all pending-approval projects from current state
+  List<Project> get pendingProjects {
+    final current = state.value ?? [];
+    return current.where((p) => !p.isApproved).toList();
   }
 
   Future<void> addPlan(String projectId, String title, String description) async {
@@ -137,6 +247,13 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
   Future<void> updateProject(String projectId, Map<String, dynamic> data) async {
     try {
       await _api.put('/projects/$projectId', data);
+      await fetchProjects();
+    } catch (e) { rethrow; }
+  }
+
+  Future<void> deleteProject(String projectId) async {
+    try {
+      await _api.delete('/projects/$projectId');
       await fetchProjects();
     } catch (e) { rethrow; }
   }
