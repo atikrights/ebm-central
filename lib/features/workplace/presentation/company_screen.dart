@@ -224,8 +224,8 @@ class CompanyScreen extends ConsumerWidget {
   Widget _buildCreateButton(BuildContext context, WidgetRef ref, bool isMobile, bool isDark, Color textColor) {
     final auth = ref.watch(authProvider);
     
-    // Only Admin or Super Admin can see the create button
-    if (!auth.isAdmin) return const SizedBox.shrink();
+    // Only authorized roles can see the create button
+    if (!auth.canCreateItems) return const SizedBox.shrink();
 
     return Container(
       height: 38,

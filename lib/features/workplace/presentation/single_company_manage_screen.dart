@@ -70,6 +70,12 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
 
   // Controllers for Blueprint - Removed (Central is Records only)
 
+  // Configure Tab State
+  final TextEditingController _pidController = TextEditingController();
+  pmod.Project? _searchedProject;
+  bool _isSearching = false;
+  bool _isActioning = false;
+
   @override
   void initState() {
     super.initState();
@@ -82,7 +88,102 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
 
   @override
   void dispose() {
+    _pidController.dispose();
     super.dispose();
+  }
+
+  void _searchProject() async {
+    final pid = _pidController.text.trim();
+    if (pid.isEmpty) return;
+
+    setState(() {
+      _isSearching = true;
+      _searchedProject = null;
+    });
+
+    try {
+      final project = await ref.read(projectProvider.notifier).searchByPid(pid);
+      if (mounted) {
+        setState(() {
+          _searchedProject = project;
+          _isSearching = false;
+        });
+        if (project == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Project not found or outside your team scope.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  void _attachProject(Company company) async {
+    if (_searchedProject == null) return;
+
+    setState(() {
+      _isActioning = true;
+    });
+
+    try {
+      await ref.read(projectProvider.notifier).linkCompanyToProject(_searchedProject!.id, company.id);
+      if (mounted) {
+        setState(() {
+          _isActioning = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Project attached successfully.'), backgroundColor: Colors.green),
+        );
+        _searchProject(); // Refresh the searched project
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isActioning = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to attach project.'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _detachProject() async {
+    if (_searchedProject == null) return;
+
+    setState(() {
+      _isActioning = true;
+    });
+
+    try {
+      await ref.read(projectProvider.notifier).detachCompanyFromProject(_searchedProject!.id);
+      if (mounted) {
+        setState(() {
+          _isActioning = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Project detached successfully.'), backgroundColor: Colors.green),
+        );
+        _searchProject(); // Refresh the searched project
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isActioning = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to detach project.'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
@@ -371,7 +472,9 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       case 1: return 'Organizational Records';
       case 2: return 'Performance Analytics';
       case 3: return 'Project Hub';
-      case 4: return 'Company Settings';
+      case 4: return 'Tasks';
+      case 5: return 'Company Settings';
+      case 6: return 'Configure';
       default: return '';
     }
   }
@@ -450,6 +553,7 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
                     _sidebarItem(3, Icons.assignment_outlined, 'Project Hub', isDark),
                     _sidebarItem(4, Icons.task_alt_outlined, 'Tasks', isDark),
                     _sidebarItem(5, Icons.settings_outlined, 'Settings', isDark),
+                    _sidebarItem(6, Icons.build_circle_outlined, 'Configure', isDark),
                   ],
                 ),
               ),
@@ -578,8 +682,172 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       case 3: return _buildProjectHubTab(company, isDark);
       case 4: return const TasksScreen(); // Integrated Tasks Screen
       case 5: return _buildPlaceholderTab('Company Settings', IconsaxPlusLinear.setting_2, isDark);
+      case 6: return _buildConfigureTab(company, isDark);
       default: return const SizedBox.shrink();
     }
+  }
+
+  Widget _buildConfigureTab(Company company, bool isDark) {
+    final textColor = isDark ? Colors.white : AppColors.darkText;
+    final subTextColor = isDark ? Colors.white70 : Colors.black54;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          GlassContainer(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Project Attachment Configuration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
+                const SizedBox(height: 8),
+                Text('Search for a project by its PID to attach or detach it from this organization.', style: TextStyle(fontSize: 12, color: subTextColor)),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                        ),
+                        child: TextField(
+                          controller: _pidController,
+                          style: TextStyle(color: textColor, fontSize: 14),
+                          textAlignVertical: TextAlignVertical.center,
+                          decoration: InputDecoration(
+                            hintText: 'Enter Project PID (e.g. PRJ-XXX-XXXX)',
+                            hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 13),
+                            prefixIcon: Icon(IconsaxPlusLinear.search_normal, size: 18, color: isDark ? Colors.white38 : Colors.black38),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                          onSubmitted: (_) => _searchProject(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: _isSearching ? null : _searchProject,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        child: _isSearching 
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Text('Search', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    )
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (_searchedProject != null) ...[
+            const SizedBox(height: 24),
+            _buildProjectResultCard(company, isDark, textColor, subTextColor),
+          ]
+        ],
+      ).animate().fadeIn().slideY(begin: 0.05),
+    );
+  }
+
+  Widget _buildProjectResultCard(Company company, bool isDark, Color textColor, Color subTextColor) {
+    final project = _searchedProject!;
+    final bool isAttachedToCurrent = project.companyId == company.id;
+    final bool isAttachedToOther = project.companyId != null && project.companyId != company.id;
+
+    Color approvalColor = project.isApproved ? AppColors.success : AppColors.warning;
+    String approvalText = project.isApproved ? 'LIVE' : 'PENDING';
+
+    return GlassContainer(
+      padding: const EdgeInsets.all(24),
+      border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(project.pid, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: approvalColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: approvalColor.withOpacity(0.5)),
+                ),
+                child: Text(approvalText, style: TextStyle(color: approvalColor, fontWeight: FontWeight.bold, fontSize: 10)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(project.name, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(IconsaxPlusLinear.status, size: 14, color: subTextColor),
+              const SizedBox(width: 6),
+              Text(
+                isAttachedToCurrent 
+                  ? 'Currently linked to ${company.name}'
+                  : isAttachedToOther 
+                    ? 'Linked to another organization'
+                    : 'Unlinked (Private)',
+                style: TextStyle(color: subTextColor, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (isAttachedToCurrent)
+            SizedBox(
+              width: 400,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: _isActioning ? null : _detachProject,
+                icon: _isActioning 
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Icon(IconsaxPlusLinear.link_square, color: Colors.white, size: 18),
+                label: const Text('DETACH PROJECT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.error,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              width: 400,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: _isActioning ? null : () => _attachProject(company),
+                icon: _isActioning 
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Icon(IconsaxPlusLinear.link_1, color: Colors.white, size: 18),
+                label: Text('ATTACH TO ${company.name.toUpperCase()}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            )
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms).scaleXY(begin: 0.95);
   }
 
   Widget _buildOverviewTab(Company company, bool isDark) {

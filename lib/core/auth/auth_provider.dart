@@ -45,6 +45,9 @@ class AuthState {
 
   bool get isAdmin => role?.toUpperCase() == 'ADMIN' || role?.toUpperCase() == 'SUPER_ADMIN';
   bool get isSuperAdmin => role?.toUpperCase() == 'SUPER_ADMIN';
+  bool get isSubAdmin => role?.toUpperCase() == 'SUB_ADMIN';
+  bool get isManager => role?.toUpperCase() == 'MANAGER';
+  bool get canCreateItems => isSuperAdmin || isAdmin || isSubAdmin || isManager;
 
   AuthState copyWith({
     bool? isLoggedIn,

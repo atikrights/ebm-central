@@ -112,7 +112,7 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
           dataList = [];
         }
         final projects = dataList.map((p) => Project.fromMap(p as Map<String, dynamic>)).toList();
-        if (mounted) {
+        if (mounted && hasListeners) {
           state = AsyncValue.data(projects);
         }
       }
@@ -256,5 +256,16 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
       await _api.delete('/projects/$projectId');
       await fetchProjects();
     } catch (e) { rethrow; }
+  }
+
+  /// Search a project by its unique PID securely
+  Future<Project?> searchByPid(String pid) async {
+    try {
+      final response = await _api.get('/projects/search-pid?pid=$pid');
+      if (response != null) {
+        return Project.fromMap(response as Map<String, dynamic>);
+      }
+    } catch (_) {}
+    return null;
   }
 }

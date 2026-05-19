@@ -9,6 +9,11 @@ class AppColors {
   static const Color secondary = Color(0xFF3CB371);
   static const Color accent = Color(0xFFFF8C42); // Warm Orange for contrast
 
+  // Status Colors
+  static const Color success = Color(0xFF10B981);
+  static const Color warning = Color(0xFFF59E0B);
+  static const Color error = Color(0xFFEF4444);
+
   // Premium Dark Mode Surface Tokens
   static const Color darkBackground = Color(0xFF070B14); // Ultra-deep slate/black
   static const Color darkSurface = Color(0xFF111827); // Elevated
