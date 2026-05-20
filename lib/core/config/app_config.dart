@@ -32,6 +32,11 @@ class AppConfig {
     if (kReleaseMode) {
       return 'https://api.ebfic.store/api';
     }
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      // 10.0.2.2 is the special alias for your host loopback interface in Android Emulator
+      // If you are using a physical device, you need to change this to your computer's local IP (e.g. http://192.168.1.x:8000/api)
+      return 'http://10.0.2.2:8000/api';
+    }
     return 'http://127.0.0.1:8000/api';
   }
 
@@ -54,7 +59,7 @@ class AppConfig {
   }
 
   static bool get isLocalhost {
-    return baseUrl.contains('127.0.0.1') || baseUrl.contains('localhost');
+    return baseUrl.contains('127.0.0.1') || baseUrl.contains('localhost') || baseUrl.contains('10.0.2.2');
   }
 
   // NOTE: Laravel's broadcasting auth is at /broadcasting/auth (NOT /api/broadcasting/auth)
