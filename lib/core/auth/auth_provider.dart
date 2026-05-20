@@ -24,6 +24,7 @@ class AuthState {
   final String? chatNickname;
   final String? chatBio;
   final String? chatAbout;
+  final bool isInitializing;
   final bool isLoading;
   final String? error;
 
@@ -39,6 +40,7 @@ class AuthState {
     this.chatNickname,
     this.chatBio,
     this.chatAbout,
+    this.isInitializing = true, // Default to true so router waits during refresh
     this.isLoading = false,
     this.error,
   });
@@ -61,6 +63,7 @@ class AuthState {
     String? chatNickname,
     String? chatBio,
     String? chatAbout,
+    bool? isInitializing,
     bool? isLoading,
     String? error,
   }) {
@@ -76,6 +79,7 @@ class AuthState {
       chatNickname: chatNickname ?? this.chatNickname,
       chatBio: chatBio ?? this.chatBio,
       chatAbout: chatAbout ?? this.chatAbout,
+      isInitializing: isInitializing ?? this.isInitializing,
       isLoading: isLoading ?? this.isLoading,
       error: error,
     );
@@ -167,7 +171,11 @@ class AuthNotifier extends Notifier<AuthState> {
         chatNickname: chatNickname,
         chatBio: chatBio,
         chatAbout: chatAbout,
+        isInitializing: false,
       );
+    } else {
+      // If no token exists, still set isInitializing to false so router goes to login
+      state = state.copyWith(isInitializing: false, isLoggedIn: false);
     }
   }
 
