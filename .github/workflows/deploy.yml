@@ -1,0 +1,195 @@
+name: Deploy EBM Central (Android, Windows, Mac)
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+jobs:
+  # ─── Job 1: Linux – Web Deploy + Android Build ────────────────────────────
+  build-and-deploy-linux:
+    name: 🚀 Linux Build & Deploy (Web, Android)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get Dependencies
+        run: |
+          flutter pub get
+
+      - name: Build Web
+        run: |
+          flutter build web --release --base-href "/" --dart-define=API_URL=https://api.ebfic.store
+
+      - name: Build Android APK
+        run: |
+          flutter build apk --release --no-tree-shake-icons --dart-define=API_URL=https://api.ebfic.store
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p 65002 -H ${{ secrets.REMOTE_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy Web Frontend to Server
+        run: |
+          rsync -avz --delete \
+            -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+            build/web/ \
+            ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:domains/ebfic.store/public_html/central/
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: central-android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  # ─── Job 2: Windows Build + Inno Setup ────────────────────────────────────
+  build-windows:
+    name: 💻 Windows Build & Package
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get Dependencies
+        run: |
+          flutter pub get
+
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Build Windows Release
+        run: |
+          flutter build windows --release --dart-define=API_URL=https://api.ebfic.store
+
+      - name: Compile Inno Setup Installer
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v', ''
+          iscc /dMyAppVersion="$ver" windows\setup.iss
+        shell: pwsh
+
+      - name: Package Windows ZIP
+        run: |
+          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "ebm-central-windows.zip"
+        shell: pwsh
+
+      - name: Copy Setup EXE to output
+        run: |
+          $setupExe = Get-ChildItem -Path "build\windows\inno\*.exe" | Select-Object -First 1
+          if ($setupExe) {
+            Copy-Item $setupExe.FullName -Destination "ebm-central-windows-setup.exe"
+          } else {
+            Write-Error "Setup EXE not found! Check Inno Setup OutputDir in setup.iss"
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: central-packaged-windows
+          path: |
+            ebm-central-windows.zip
+            ebm-central-windows-setup.exe
+
+  # ─── Job 3: macOS Build ───────────────────────────────────────────────────
+  build-macos:
+    name: 🍎 macOS Build & Package
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get Dependencies
+        run: |
+          flutter pub get
+
+      - name: Enable macOS Desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Build macOS Release
+        run: |
+          flutter build macos --release --dart-define=API_URL=https://api.ebfic.store
+
+      - name: Package macOS ZIP
+        run: |
+          cd build/macos/Build/Products/Release
+          zip -r ../../../../../ebm-central-macos.zip .
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: central-packaged-macos
+          path: ebm-central-macos.zip
+
+  # ─── Job 4: Create GitHub Release (only on tag push) ─────────────────────
+  create-release:
+    name: 🚀 Create GitHub Release
+    needs: [build-and-deploy-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-files
+
+      - name: Flatten Release Files
+        run: |
+          mkdir final-release
+          find release-files -name "*.apk" -exec cp {} final-release/ \;
+          find release-files -name "*.zip" -exec cp {} final-release/ \;
+          find release-files -name "*.exe" -exec cp {} final-release/ \;
+          ls -la final-release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "EBM Central ${{ github.ref_name }}"
+          body: |
+            ## 🚀 EBM Central ${{ github.ref_name }}
+            
+            ### 📦 Downloads
+            - **Windows**: `ebm-central-windows-setup.exe` (Installer) or `ebm-central-windows.zip` (Portable)
+            - **Android**: `app-release.apk`
+            - **macOS**: `ebm-central-macos.zip`
+            
+            ### ✅ What's Included
+            - Cross-platform secure local store (AES-256)
+            - Zero-loss data sync with production server
+            - Auto-update on install with AppMutex
+          files: final-release/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
