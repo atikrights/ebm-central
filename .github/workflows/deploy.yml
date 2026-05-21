@@ -1,4 +1,4 @@
-name: Deploy EBM Central (Android, Windows, Mac)
+name: Deploy EBM Central (Android, Windows)
 
 on:
   push:
@@ -114,45 +114,10 @@ jobs:
             ebm-central-windows.zip
             ebm-central-windows-setup.exe
 
-  # ─── Job 3: macOS Build ───────────────────────────────────────────────────
-  build-macos:
-    name: 🍎 macOS Build & Package
-    runs-on: macos-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Install Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-
-      - name: Get Dependencies
-        run: |
-          flutter pub get
-
-      - name: Enable macOS Desktop
-        run: flutter config --enable-macos-desktop
-
-      - name: Build macOS Release
-        run: |
-          flutter build macos --release --dart-define=API_URL=https://api.ebfic.store
-
-      - name: Package macOS ZIP
-        run: |
-          cd build/macos/Build/Products/Release
-          zip -r ../../../../../ebm-central-macos.zip .
-
-      - name: Upload macOS Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: central-packaged-macos
-          path: ebm-central-macos.zip
-
-  # ─── Job 4: Create GitHub Release (only on tag push) ─────────────────────
+  # ─── Job 3: Create GitHub Release (only on tag push) ─────────────────────
   create-release:
     name: 🚀 Create GitHub Release
-    needs: [build-and-deploy-linux, build-windows, build-macos]
+    needs: [build-and-deploy-linux, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -182,7 +147,6 @@ jobs:
             ### 📦 Downloads
             - **Windows**: `ebm-central-windows-setup.exe` (Installer) or `ebm-central-windows.zip` (Portable)
             - **Android**: `app-release.apk`
-            - **macOS**: `ebm-central-macos.zip`
             
             ### ✅ What's Included
             - Cross-platform secure local store (AES-256)
