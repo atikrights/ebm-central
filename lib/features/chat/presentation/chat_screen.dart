@@ -116,7 +116,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
       final aiResult = response['body'] ?? response['message'] ?? 'I processed your request.';
       
       // Save AI response to DB
-      await chatService.sendMessage('ai', aiResult, isAi: true);
+      await chatService.syncMessage('ai', aiResult);
       
       if (mounted) {
         setState(() {
@@ -176,7 +176,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
 
     try {
       // Sync with database (Encrypted)
-      await chatService.sendMessage(receiverType, text);
+      await chatService.syncMessage(receiverType, text);
       
       if (_selectedChatIndex == 1) {
         _generateAiResponse(text);

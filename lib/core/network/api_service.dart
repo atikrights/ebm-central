@@ -4,9 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
+import '../auth/auth_provider.dart';
 
 // ─── ApiService Provider ────────────────-----------------------------------
-final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
+final apiServiceProvider = Provider<ApiService>((ref) => ApiService(ref));
 
 /// EBM Central API Service
 /// 
@@ -16,6 +17,9 @@ final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
 /// - Consistent error handling with typed [ApiException] for the UI layer.
 /// - Production URL detection is automatic based on the current host.
 class ApiService {
+  final Ref? _ref;
+  ApiService([this._ref]);
+
   // ─── Base URL (Auto-detects Production vs Local) ─────────────────────────
   String get baseUrl => AppConfig.baseUrl;
 
@@ -164,7 +168,15 @@ class ApiService {
       }
     }
 
-    if (statusCode == 401) throw ApiException('Unauthorized. Please log in again.', statusCode: 401);
+    if (statusCode == 401) {
+      final ref = _ref;
+      if (ref != null) {
+        Future.microtask(() {
+          ref.read(authProvider.notifier).logout();
+        });
+      }
+      throw ApiException('Unauthorized. Please log in again.', statusCode: 401);
+    }
     if (statusCode == 403) throw ApiException('Access denied: $message', statusCode: 403);
     if (statusCode == 422) throw ApiException('Validation error: $message', statusCode: 422);
     if (statusCode == 429) throw ApiException('Too many requests. Please wait.', statusCode: 429);

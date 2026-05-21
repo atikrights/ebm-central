@@ -3,7 +3,6 @@ import 'dart:io' if (dart.library.html) 'package:frontend/core/utils/io_stub.dar
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
-import '../widgets/glass_card.dart';
 import '../../features/chat/presentation/chat_detail_screen.dart'; // For CallState
 import '../../features/chat/presentation/call_screen.dart';
 

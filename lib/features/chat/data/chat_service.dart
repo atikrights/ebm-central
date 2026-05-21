@@ -285,4 +285,18 @@ class ChatService {
       throw Exception('Failed to sync message');
     }
   }
+
+  Future<bool> clearChat(String receiverType) async {
+    final token = await _getToken();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/chats/clear'),
+      headers: {
+        'Authorization': 'Bearer $token', 
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'receiver_type': receiverType}),
+    );
+    return response.statusCode == 200;
+  }
 }

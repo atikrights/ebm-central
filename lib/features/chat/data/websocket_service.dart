@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
@@ -12,12 +11,23 @@ final webSocketServiceProvider = Provider<WebSocketService>((ref) {
   );
 });
 
+/// Returns true only on platforms where pusher_channels_flutter has a
+/// native plugin implementation: Android, iOS, and Web.
+/// Windows / macOS / Linux desktop → MissingPluginException without this guard.
+bool get _isPusherSupported {
+  if (kIsWeb) return true;
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+}
+
 class WebSocketService {
-  late PusherChannelsFlutter pusher;
+  // Nullable so we never call getInstance() on unsupported platforms
+  PusherChannelsFlutter? _pusher;
+
   final String apiKey;
   final String host;
   final int port;
-  
+
   final List<Function(PusherEvent)> _listeners = [];
   bool _isInitialized = false;
 
@@ -26,7 +36,9 @@ class WebSocketService {
     required this.host,
     required this.port,
   }) {
-    pusher = PusherChannelsFlutter.getInstance();
+    if (_isPusherSupported) {
+      _pusher = PusherChannelsFlutter.getInstance();
+    }
   }
 
   void addListener(Function(PusherEvent) listener) {
@@ -44,23 +56,25 @@ class WebSocketService {
     String? token,
     Function(String)? onConnectionStateChange,
   }) async {
+    // Skip entirely on unsupported platforms (Windows, macOS, Linux)
+    if (!_isPusherSupported || _pusher == null) {
+      debugPrint("WebSocket: Pusher not supported on this platform — skipping.");
+      return;
+    }
+
     if (token == null) return;
+
     if (_isInitialized) {
+      // Already initialized — just re-subscribe to user channel
       final prefix = AppConfig.envPrefix;
-      // Re-subscribe to user channels if ID changed, otherwise skip re-init
-      await pusher.subscribe(channelName: 'private-${prefix}dm.$userId');
+      await _pusher!.subscribe(channelName: 'private-${prefix}dm.$userId');
       return;
     }
 
     try {
-      // Small delay for Windows to ensure native plugin is ready
-      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-
-      await pusher.init(
+      await _pusher!.init(
         apiKey: AppConfig.pusherKey,
-        cluster: AppConfig.pusherCluster, 
+        cluster: AppConfig.pusherCluster,
         useTLS: true,
         authEndpoint: AppConfig.authEndpoint,
         authParams: {
@@ -70,9 +84,7 @@ class WebSocketService {
           }
         },
         onConnectionStateChange: (currentState, previousState) {
-          if (onConnectionStateChange != null) {
-            onConnectionStateChange(currentState);
-          }
+          onConnectionStateChange?.call(currentState);
         },
         onEvent: (event) {
           debugPrint("WS Event: ${event.eventName}");
@@ -83,11 +95,11 @@ class WebSocketService {
       );
 
       final prefix = AppConfig.envPrefix;
-      await pusher.subscribe(channelName: 'private-${prefix}dm.$userId');
-      await pusher.subscribe(channelName: 'presence-${prefix}chat-presence');
-      await pusher.subscribe(channelName: 'private-${prefix}ebm-global');
+      await _pusher!.subscribe(channelName: 'private-${prefix}dm.$userId');
+      await _pusher!.subscribe(channelName: 'presence-${prefix}chat-presence');
+      await _pusher!.subscribe(channelName: 'private-${prefix}ebm-global');
 
-      await pusher.connect();
+      await _pusher!.connect();
       _isInitialized = true;
     } catch (e) {
       debugPrint("WebSocket Init Error: $e");
@@ -95,7 +107,14 @@ class WebSocketService {
   }
 
   Future<void> disconnect() async {
-    await pusher.disconnect();
-    _isInitialized = false;
+    // Skip on unsupported platforms or if never connected
+    if (!_isPusherSupported || _pusher == null || !_isInitialized) return;
+    try {
+      await _pusher!.disconnect();
+    } catch (e) {
+      debugPrint("WebSocket Disconnect Error: $e");
+    } finally {
+      _isInitialized = false;
+    }
   }
 }

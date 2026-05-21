@@ -16,19 +16,26 @@ OutputBaseFilename=ebm-central-windows
 Compression=lzma
 SolidCompression=yes
 SetupIconFile=runner\resources\app_icon.ico
-UninstallDisplayIcon={app}\frontend.exe
+UninstallDisplayIcon={app}\ebm_central.exe
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
+WizardStyle=modern
+SetupMutex=ebmCentralSetupMutex
+AppMutex=ebmCentralMutex
+CloseApplications=yes
+
+[InstallDelete]
+Type: filesandordirs; Name: "{app}\data"
 
 [Files]
 Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\ebm Central"; Filename: "{app}\frontend.exe"
-Name: "{autodesktop}\ebm Central"; Filename: "{app}\frontend.exe"; Tasks: desktopicon
+Name: "{autoprograms}\ebm Central"; Filename: "{app}\ebm_central.exe"
+Name: "{autodesktop}\ebm Central"; Filename: "{app}\ebm_central.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\frontend.exe"; Description: "{cm:LaunchProgram,ebm Central}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ebm_central.exe"; Description: "{cm:LaunchProgram,ebm Central}"; Flags: nowait postinstall skipifsilent
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"

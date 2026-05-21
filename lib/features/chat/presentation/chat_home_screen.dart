@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui';
-import 'chat_models.dart';
-import 'chat_service.dart';
+import '../data/chat_models.dart';
+import '../data/chat_service.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

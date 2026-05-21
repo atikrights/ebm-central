@@ -2,13 +2,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/system_task.dart';
 import '../../../core/network/api_service.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 
 class TaskProvider extends ChangeNotifier {
   final Ref _ref;
   List<SystemTask> _tasks = [];
   bool _isLoading = false;
+  Timer? _syncTimer;
 
-  TaskProvider(this._ref);
+  TaskProvider(this._ref) {
+    _startPeriodicSync();
+  }
+
+  void _startPeriodicSync() {
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      syncWithDatabase();
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
+  }
 
   bool get isLoading => _isLoading;
   List<SystemTask> get allTasks => _tasks;
@@ -26,7 +43,7 @@ class TaskProvider extends ChangeNotifier {
       if (projectId != null) params.add('project_id=$projectId');
       if (planId != null) params.add('plan_id=$planId');
       if (params.isNotEmpty) {
-        endpoint += '?' + params.join('&');
+        endpoint += '?${params.join('&')}';
       }
 
       final response = await api.get(endpoint);
@@ -48,7 +65,7 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addTask(SystemTask task, {required String companyId}) async {
+  Future<SystemTask?> addTask(SystemTask task, {required String companyId}) async {
     try {
       final api = _ref.read(apiServiceProvider);
       final response = await api.post('/tasks', {
@@ -60,10 +77,12 @@ class TaskProvider extends ChangeNotifier {
         final newTask = SystemTask.fromMap(response);
         _tasks.insert(0, newTask);
         notifyListeners();
+        return newTask;
       }
     } catch (e) {
       debugPrint('❌ TaskProvider Add Task Error: $e');
     }
+    return null;
   }
 
   Future<void> updateTask(SystemTask task) async {

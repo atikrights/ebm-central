@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'local_database_service.dart';
@@ -47,13 +48,7 @@ class ChatGlobalNotifier extends StateNotifier<ChatGlobalState> {
   }
 
   Future<void> _init() async {
-    // 1. Load from Local Cache for Instant UI
-    // await _loadFromLocal(); // Implementation pending full DB verification
-    
-    // 2. Start Global WebSocket Listener
     _setupWebSocket();
-    
-    // 3. Perform Delta Sync
     _performDeltaSync();
   }
 
@@ -61,28 +56,29 @@ class ChatGlobalNotifier extends StateNotifier<ChatGlobalState> {
     final ws = ref.read(webSocketServiceProvider);
     
     ws.addListener((event) {
-      final String type = event.eventName;
-      final data = event.data;
+      try {
+        final String type = event.eventName;
+        final data = event.data is String
+            ? jsonDecode(event.data)
+            : (event.data ?? {}) as Map<String, dynamic>;
 
-      if (type == 'message.new') {
-        _handleNewMessage(data);
-      } else if (type == 'message.status') {
-        _handleStatusUpdate(data);
-      } else if (type == 'user.typing') {
-        _handleTyping(data);
+        if (type == 'message.new') {
+          _handleNewMessage(data);
+        } else if (type == 'message.status') {
+          _handleStatusUpdate(data);
+        } else if (type == 'user.typing') {
+          _handleTyping(data);
+        }
+      } catch (e) {
+        // ignore websocket decode errors
       }
     });
   }
 
   void _handleNewMessage(Map<String, dynamic> data) {
     final partnerId = data['sender_id'].toString();
-    
-    // 1. Reconcile Optimistic UI if it's our own message from another device
-    if (data['client_id'] != null) {
-       // Search and replace temporary message
-    }
 
-    // 2. Update State
+    // Update State
     final currentMsgs = state.messages[partnerId] ?? [];
     state = state.copyWith(
       messages: {
@@ -91,7 +87,7 @@ class ChatGlobalNotifier extends StateNotifier<ChatGlobalState> {
       }
     );
 
-    // 3. Persist to DB
+    // Persist to DB
     _db.saveMessage(data);
   }
 
@@ -136,30 +132,12 @@ class ChatGlobalNotifier extends StateNotifier<ChatGlobalState> {
 
     // 2. Sync to Backend
     try {
-      final realMsg = await ref.read(chatRepositoryProvider).sendMessage(
-        receiverId: partnerId,
-        message: content,
-        clientId: clientId,
+      await ref.read(chatRepositoryProvider).sendMessage(
+        int.parse(partnerId),
+        content,
       );
-      
-      // 3. RECONCILE: Replace temp with real
-      _reconcileMessage(partnerId, clientId, realMsg);
     } catch (e) {
       // Handle failure: update status to 'failed'
-    }
-  }
-
-  void _reconcileMessage(String partnerId, String clientId, Map<String, dynamic> realMsg) {
-    final currentMsgs = state.messages[partnerId] ?? [];
-    final index = currentMsgs.indexWhere((m) => m['client_id'] == clientId);
-    
-    if (index != -1) {
-      final newList = List<Map<String, dynamic>>.from(currentMsgs);
-      newList[index] = realMsg;
-      state = state.copyWith(
-        messages: {...state.messages, partnerId: newList},
-      );
-      _db.saveMessage(realMsg);
     }
   }
 }

@@ -31,6 +31,12 @@ class RouterNotifier extends ChangeNotifier {
 
   String? redirect(BuildContext context, GoRouterState state) {
     final authState = _ref.read(authProvider);
+    
+    // During session initialization, wait and do NOT redirect to login screen
+    if (authState.isInitializing) {
+      return null;
+    }
+
     final isLoggedIn = authState.isLoggedIn;
     
     // Safety Check: Accessing /join without a token is not allowed

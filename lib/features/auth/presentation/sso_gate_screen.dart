@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:url_launcher/url_launcher.dart';
+import '../../../core/auth/auth_provider.dart';
 
 class SSOGateScreen extends StatefulWidget {
   final String? targetUrl;
@@ -36,7 +37,8 @@ class _SSOGateScreenState extends State<SSOGateScreen> {
 
   Future<void> _authorize() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
+    final deviceId = prefs.getString('ebm_secure_device_id') ?? '';
+    final token = await SecureLocalStore.readDecrypted('auth_token', deviceId);
     
     if (token != null && widget.targetUrl != null) {
       String target;

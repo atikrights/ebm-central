@@ -1,34 +1,58 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'websocket_service.dart';
 import 'chat_models.dart';
 import '../../../core/network/api_service.dart';
+
+final chatRepositoryProvider = Provider<ChatRepository>((ref) {
+  return ChatRepository(
+    ref.read(apiServiceProvider),
+    ref.read(webSocketServiceProvider),
+  );
+});
 
 class ChatRepository {
   final ApiService _api;
   final WebSocketService _ws;
   
   // Local state for instant UI updates
-  final _messageController = StreamController<List<ChatMessage>>.broadcast();
-  final List<ChatMessage> _messages = [];
+  final _messageController = StreamController<List<DirectMessage>>.broadcast();
+  final List<DirectMessage> _messages = [];
   
   ChatRepository(this._api, this._ws);
 
-  Stream<List<ChatMessage>> get messageStream => _messageController.stream;
+  Stream<List<DirectMessage>> get messageStream => _messageController.stream;
 
   Future<void> init(int userId, String token) async {
     await _ws.init(
       userId: userId,
       token: token,
-      onNewMessage: _handleIncomingMessage,
-      onStatusUpdate: _handleStatusUpdate,
-      onPresenceUpdate: (data) => debugPrint("Presence: $data"),
     );
+    _ws.addListener(_handleWsEvent);
+  }
+
+  void _handleWsEvent(dynamic event) {
+    // pusher_channels_flutter event can be PusherEvent
+    try {
+      final name = event.eventName;
+      final data = event.data is String
+          ? jsonDecode(event.data)
+          : (event.data ?? {}) as Map<String, dynamic>;
+
+      if (name == 'message.new') {
+        _handleIncomingMessage(data);
+      } else if (name == 'message.status') {
+        _handleStatusUpdate(data);
+      }
+    } catch (e) {
+      debugPrint("ChatRepository WS Event Error: $e");
+    }
   }
 
   void _handleIncomingMessage(Map<String, dynamic> data) {
-    final msg = ChatMessage.fromJson(data);
+    final msg = DirectMessage.fromJson(data);
     final String clientId = data['client_id']?.toString() ?? '';
 
     // Reconcile optimistic UI if client_id matches
@@ -66,11 +90,13 @@ class ChatRepository {
     final clientId = 'client_${DateTime.now().millisecondsSinceEpoch}';
     final tempId = DateTime.now().millisecondsSinceEpoch;
     
-    final optimisticMsg = ChatMessage(
+    final optimisticMsg = DirectMessage(
       id: tempId,
       clientId: clientId, // Using temporary field if model supports it, else we match by id logic
       senderId: 0,
+      receiverId: receiverId,
       message: content,
+      messageType: 'text',
       status: 'sending',
       createdAt: DateTime.now(),
       isMe: true,
@@ -103,12 +129,13 @@ class ChatRepository {
     final List<dynamic> data = (response is Map) ? response['data'] : response;
     
     _messages.clear();
-    _messages.addAll(data.map((m) => ChatMessage.fromJson(m)).toList().reversed);
+    _messages.addAll(data.map((m) => DirectMessage.fromJson(m)).toList().reversed);
     _messageController.add(List.from(_messages));
   }
 
   void dispose() {
     _messageController.close();
+    _ws.removeListener(_handleWsEvent);
     _ws.disconnect();
   }
 }

@@ -1,10 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// EBM Global Configuration Management
 class AppConfig {
+  static const String _storageKey = 'ebm_base_url_override';
+  static String? _customBaseUrl;
+
+  /// Must be called once at app startup
+  static Future<void> init() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _customBaseUrl = prefs.getString(_storageKey);
+    } catch (_) {}
+  }
+
   /// Base API URL (e.g., https://api.ebfic.store/api)
   static String get baseUrl {
+    // 1. Check for manual override
+    if (_customBaseUrl != null && _customBaseUrl!.isNotEmpty) {
+      return _customBaseUrl!.endsWith('/api') ? _customBaseUrl! : '$_customBaseUrl/api';
+    }
+
     const definedUrl = String.fromEnvironment('API_URL');
     if (definedUrl.isNotEmpty) {
       return definedUrl.endsWith('/api') ? definedUrl : '$definedUrl/api';

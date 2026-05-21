@@ -173,9 +173,71 @@ class AuthNotifier extends Notifier<AuthState> {
         chatAbout: chatAbout,
         isInitializing: false,
       );
+
+      // Trigger background session verification asynchronously to keep details in sync
+      _verifySessionAsync(token, role, name, email, userId);
     } else {
       // If no token exists, still set isInitializing to false so router goes to login
       state = state.copyWith(isInitializing: false, isLoggedIn: false);
+    }
+  }
+
+  Future<void> _verifySessionAsync(
+    String token,
+    String cachedRole,
+    String? cachedName,
+    String? cachedEmail,
+    int? cachedUserId,
+  ) async {
+    try {
+      final api = ref.read(apiServiceProvider);
+      final response = await api.get('/user');
+      
+      final String role = response['role']?.toUpperCase() ?? cachedRole;
+      final String? name = response['name'] ?? cachedName;
+      final String? email = response['email'] ?? cachedEmail;
+      final int userId = response['id'];
+      
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_role', role);
+      if (name != null) await prefs.setString('user_name', name);
+      if (email != null) await prefs.setString('user_email', email);
+      await prefs.setInt('user_id', userId);
+      
+      if (response['chat_profile_id'] != null) {
+        await prefs.setString('chat_profile_id', response['chat_profile_id']);
+      }
+      if (response['chat_number'] != null) {
+        await prefs.setString('chat_number', response['chat_number']);
+      }
+      if (response['chat_nickname'] != null) {
+        await prefs.setString('chat_nickname', response['chat_nickname']);
+      }
+      if (response['chat_bio'] != null) {
+        await prefs.setString('chat_bio', response['chat_bio']);
+      }
+      if (response['chat_about'] != null) {
+        await prefs.setString('chat_about', response['chat_about']);
+      }
+
+      state = state.copyWith(
+        userId: userId,
+        role: role,
+        name: name,
+        email: email,
+        chatProfileId: response['chat_profile_id'],
+        chatNumber: response['chat_number'],
+        chatNickname: response['chat_nickname'],
+        chatBio: response['chat_bio'],
+        chatAbout: response['chat_about'],
+      );
+    } catch (e) {
+      // Only log out if the backend explicitly reports that the token is unauthorized (401)
+      if (e is ApiException && e.statusCode == 401) {
+        await logout();
+      } else {
+        debugPrint("Background session verification failed (e.g. offline/server issues): $e");
+      }
     }
   }
 
@@ -303,6 +365,7 @@ class AuthNotifier extends Notifier<AuthState> {
         chatNickname: userData['chat_nickname'],
         chatBio: userData['chat_bio'],
         chatAbout: userData['chat_about'],
+        isInitializing: false,
       );
     } catch (e) {
       state = state.copyWith(
@@ -356,6 +419,7 @@ class AuthNotifier extends Notifier<AuthState> {
         name: name,
         email: email,
         role: role.toUpperCase(),
+        isInitializing: false,
       );
       return true;
     } catch (e) {
@@ -372,7 +436,7 @@ class AuthNotifier extends Notifier<AuthState> {
     final api = ref.read(apiServiceProvider);
     api.clearToken();
     
-    state = const AuthState();
+    state = const AuthState(isInitializing: false);
   }
 
   void updateChatInfo({String? id, String? number, String? nickname, String? bio, String? about}) {

@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iconsax_plus/iconsax_plus.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:responsive_framework/responsive_framework.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../tasks/models/system_task.dart';
 import '../../tasks/providers/task_provider.dart';
+import 'task_workspace_screen.dart';
 import '../../projects/providers/project_provider.dart';
 import '../../projects/models/project.dart';
 import '../../workplace/providers/company_provider.dart';
@@ -21,6 +21,7 @@ class TasksScreen extends ConsumerStatefulWidget {
 class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
   final TextEditingController _searchCtrl = TextEditingController();
+  // ignore: unused_field
   final Set<String> _selectedTaskIds = {};
   String _searchQuery = "";
 
@@ -126,9 +127,13 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
                       final task = allTasks[index];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: GlassContainer(
-                          borderRadius: 12.0,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => TaskWorkspaceScreen(taskId: task.id)));
+                          },
+                          child: GlassContainer(
+                            borderRadius: 12.0,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           child: Row(
                             children: [
                               Container(
@@ -180,7 +185,8 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
                             ],
                           ),
                         ),
-                      ).animate().fadeIn(delay: Duration(milliseconds: 50 * index)).slideX();
+                      ),
+                    ).animate().fadeIn(delay: Duration(milliseconds: 50 * index)).slideX();
                     },
                   ),
           ),
@@ -502,11 +508,13 @@ class _CreateTaskDialogState extends ConsumerState<_CreateTaskDialog> with Singl
 
     final companyId = _selectedProject?.companyId ?? cp?.selectedCompanyId ?? ((cp?.companies.isNotEmpty ?? false) ? cp!.companies.first.id : '1');
 
-    await tp.addTask(newTask, companyId: companyId);
+    final createdTask = await tp.addTask(newTask, companyId: companyId);
 
     if (!mounted) return;
     Navigator.pop(context);
-    // Future workspace navigation can happen here
+    if (createdTask != null) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => TaskWorkspaceScreen(taskId: createdTask.id)));
+    }
   }
 
   @override

@@ -12,6 +12,9 @@ class DirectMessage {
   final DateTime createdAt;
   final ChatUser? sender;
 
+  final bool isMe;
+  final String? clientId;
+
   DirectMessage({
     required this.id,
     required this.senderId,
@@ -23,6 +26,8 @@ class DirectMessage {
     required this.status,
     required this.createdAt,
     this.sender,
+    this.isMe = false,
+    this.clientId,
   });
 
   factory DirectMessage.fromJson(Map<String, dynamic> json) {
@@ -33,10 +38,12 @@ class DirectMessage {
       message: json['message'] ?? '',
       messageType: json['message_type'] ?? 'text',
       filePath: json['file_path'],
-      fileName: json['file_name'],
+      fileName: json['fileName'] ?? json['file_name'],
       status: json['status'] ?? 'sent',
       createdAt: DateTime.parse(json['created_at']),
       sender: json['sender'] != null ? ChatUser.fromJson(json['sender']) : null,
+      isMe: json['is_me'] == true || json['isMe'] == true,
+      clientId: json['client_id']?.toString(),
     );
   }
   
@@ -52,7 +59,39 @@ class DirectMessage {
       'status': status,
       'created_at': createdAt.toIso8601String(),
       'sender': sender?.toJson(),
+      'is_me': isMe,
+      'client_id': clientId,
     };
+  }
+
+  DirectMessage copyWith({
+    int? id,
+    int? senderId,
+    int? receiverId,
+    String? message,
+    String? messageType,
+    String? filePath,
+    String? fileName,
+    String? status,
+    DateTime? createdAt,
+    ChatUser? sender,
+    bool? isMe,
+    String? clientId,
+  }) {
+    return DirectMessage(
+      id: id ?? this.id,
+      senderId: senderId ?? this.senderId,
+      receiverId: receiverId ?? this.receiverId,
+      message: message ?? this.message,
+      messageType: messageType ?? this.messageType,
+      filePath: filePath ?? this.filePath,
+      fileName: fileName ?? this.fileName,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      sender: sender ?? this.sender,
+      isMe: isMe ?? this.isMe,
+      clientId: clientId ?? this.clientId,
+    );
   }
 }
 
