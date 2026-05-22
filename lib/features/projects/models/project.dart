@@ -156,6 +156,7 @@ class Plan {
   final double budget;
   final double consumedBudget;
   final String status;
+  final DateTime? createdAt;
 
   Plan({
     required this.id,
@@ -164,6 +165,7 @@ class Plan {
     required this.budget,
     required this.consumedBudget,
     required this.status,
+    this.createdAt,
   });
 
   factory Plan.fromMap(Map<String, dynamic> map) {
@@ -174,6 +176,9 @@ class Plan {
       budget: (map['budget'] ?? 0).toDouble(),
       consumedBudget: (map['consumed_budget'] ?? 0).toDouble(),
       status: map['status'] ?? 'Active',
+      createdAt: map['created_at'] != null || map['createdAt'] != null
+          ? DateTime.tryParse(map['created_at'] ?? map['createdAt'])
+          : null,
     );
   }
 }

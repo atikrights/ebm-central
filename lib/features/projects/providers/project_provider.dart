@@ -23,9 +23,14 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
     super.dispose();
   }
 
-  Future<void> fetchProjects() async {
+  Future<void> fetchProjects({bool showLoading = false}) async {
     try {
-      state = const AsyncValue.loading();
+      // Only show loading spinner on first load (no existing data).
+      // Background refreshes must be completely silent to prevent layout flicker.
+      final hasData = state is AsyncData;
+      if (!hasData || showLoading) {
+        state = const AsyncValue.loading();
+      }
       final response = await _api.get('/projects');
       if (response != null) {
         final List dataList;
@@ -37,12 +42,15 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
           dataList = [];
         }
         final projects = dataList.map((p) => Project.fromMap(p as Map<String, dynamic>)).toList();
-        state = AsyncValue.data(projects);
+        if (mounted) state = AsyncValue.data(projects);
       } else {
-        state = const AsyncValue.data([]);
+        if (mounted) state = const AsyncValue.data([]);
       }
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      // On error: only update state if we don't already have data (preserve stale cache)
+      if (state is! AsyncData) {
+        state = AsyncValue.error(e, st);
+      }
     }
   }
 
@@ -129,13 +137,19 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
     ProjectStatus status = ProjectStatus.draft,
   }) async {
     try {
-      final response = await _api.post('/projects', {
+      // Build the payload — only include company_id when it's actually set.
+      // Send as int to match the backend's nullable|integer validation rule.
+      final payload = <String, dynamic>{
         'name': name,
-        'company_id': companyId,
         'category': category,
         'description': description,
         'status': status.name,
-      });
+      };
+      if (companyId != null) {
+        payload['company_id'] = int.tryParse(companyId) ?? companyId;
+      }
+
+      final response = await _api.post('/projects', payload);
       await fetchProjects();
       if (response != null) {
         return Project.fromMap(response as Map<String, dynamic>);
@@ -233,6 +247,16 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
   Future<void> removePlan(String projectId, String planId) async {
     try {
       await _api.delete('/plans/$planId');
+      await fetchProjects();
+    } catch (e) { rethrow; }
+  }
+
+  Future<void> updatePlan(String projectId, String planId, String title, String description) async {
+    try {
+      await _api.put('/plans/$planId', {
+        'title': title,
+        'description': description,
+      });
       await fetchProjects();
     } catch (e) { rethrow; }
   }

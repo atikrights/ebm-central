@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -284,7 +285,7 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
               padding: const EdgeInsets.symmetric(horizontal: 10),
               children: [
                 _sidebarItem(0, IconsaxPlusLinear.grid_1, 'Overview', isDark),
-                _sidebarItem(1, IconsaxPlusLinear.radar, 'The Radar', isDark),
+                _sidebarItem(1, IconsaxPlusLinear.radar, 'Radar', isDark),
                 _sidebarItem(2, IconsaxPlusLinear.hierarchy, 'Plans', isDark),
                 _sidebarItem(3, IconsaxPlusLinear.verify, 'Records', isDark),
                 _sidebarItem(4, IconsaxPlusLinear.document_favorite, 'Console Log', isDark),
@@ -410,7 +411,15 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
           onOpenConsole: (p) => setState(() => _activePlan = p),
         );
       case 3: return _buildRecordsTab(project, isDark);
-      case 4: return _ConsoleLogCentral(project: project, isDark: isDark);
+      case 4:
+        return _ConsoleLogCentral(
+          project: project,
+          isDark: isDark,
+          onOpenConsole: (p) => setState(() {
+            _activePlan = p;
+            _selectedTabIndex = 2;
+          }),
+        );
       case 5: return _buildPlaceholderTab('Project Settings', IconsaxPlusLinear.setting_2, isDark);
       default: return const SizedBox.shrink();
     }
@@ -633,105 +642,14 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
   }
 
   Widget _buildRadarTab(Project project, bool isDark) {
-    final color = project.brandColor;
-    final isMobile = MediaQuery.of(context).size.width < 768;
-
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(isMobile ? 16 : 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('STRATEGIC RADAR MAP', style: TextStyle(
-                    fontSize: 20, 
-                    fontWeight: FontWeight.bold, 
-                    letterSpacing: 0.5,
-                    color: isDark ? Colors.white : Colors.black87,
-                  )),
-                  const SizedBox(height: 4),
-                  Text('Interactive deployment mapping & connection nodes', style: TextStyle(
-                    fontSize: 12, 
-                    color: isDark ? Colors.white38 : Colors.black38,
-                  )),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          
-          // Radar Map Viewport container
-          Container(
-            height: 550,
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.06)),
-              boxShadow: isDark ? [] : [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                )
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: _StrategicRadarMapCentral(project: project),
-          ),
-          
-          const SizedBox(height: 24),
-          
-          // Metric Cards
-          if (isMobile)
-            Column(
-              children: [
-                _buildRadarMetricCard(
-                  'Radar Health', 
-                  'Operational', 
-                  Colors.green, 
-                  IconsaxPlusLinear.shield_tick, 
-                  isDark,
-                ),
-                const SizedBox(height: 16),
-                _buildRadarMetricCard(
-                  'Connected Nodes', 
-                  '${project.plans.length} Hubs Registered', 
-                  color, 
-                  IconsaxPlusLinear.hierarchy, 
-                  isDark,
-                ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: _buildRadarMetricCard(
-                    'Radar Health', 
-                    'Operational', 
-                    Colors.green, 
-                    IconsaxPlusLinear.shield_tick, 
-                    isDark,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildRadarMetricCard(
-                    'Connected Nodes', 
-                    '${project.plans.length} Hubs Registered', 
-                    color, 
-                    IconsaxPlusLinear.hierarchy, 
-                    isDark,
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
+    return _StrategicRadarMapCentral(
+      project: project,
+      onPlanSelected: (plan) {
+        setState(() {
+          _activePlan = plan;
+          _selectedTabIndex = 2;
+        });
+      },
     );
   }
 
@@ -1697,6 +1615,36 @@ class _PlansTabCentralState extends State<_PlansTabCentral> {
   @override
   void dispose() { _titleCtrl.dispose(); _descCtrl.dispose(); super.dispose(); }
 
+  Future<void> _handleCreatePlan() async {
+    if (_titleCtrl.text.trim().isEmpty) return;
+    setState(() => _isCreating = true);
+    try {
+      await widget.ref.read(projectProvider.notifier).addPlan(
+        widget.project.id,
+        _titleCtrl.text.trim(),
+        _descCtrl.text.trim(),
+      );
+      _titleCtrl.clear();
+      _descCtrl.clear();
+    } catch (_) {}
+    if (mounted) {
+      setState(() => _isCreating = false);
+    }
+  }
+
+  String _formatPlanCode(Plan plan) {
+    String suffix = '';
+    if (plan.id.length >= 4 && !RegExp(r'^\d+$').hasMatch(plan.id)) {
+      suffix = plan.id.substring(0, 4).toUpperCase();
+    } else {
+      suffix = plan.icode.length >= 4 
+          ? plan.icode.substring(0, 4).toUpperCase() 
+          : plan.icode.padLeft(4, '0').toUpperCase();
+    }
+    final prefix = widget.project.pid.isEmpty ? 'PLN' : widget.project.pid;
+    return '$prefix-$suffix';
+  }
+
   @override
   Widget build(BuildContext context) {
     final color = widget.project.brandColor;
@@ -1705,152 +1653,891 @@ class _PlansTabCentralState extends State<_PlansTabCentral> {
     final w = MediaQuery.of(context).size.width;
     final isMobile = w < 768;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(isMobile ? 16 : 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: color.withOpacity(0.1)),
+    // Group plans by date
+    final Map<String, List<Plan>> groupedPlans = {};
+    final now = DateTime.now();
+    final todayStr = DateFormat('yyyy-MM-dd').format(now);
+    final yesterdayStr = DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 1)));
+    
+    // Sort plans by createdAt (newest first)
+    final sortedPlans = List<Plan>.from(plans);
+    sortedPlans.sort((a, b) {
+      final aTime = a.createdAt != null ? a.createdAt!.toLocal() : widget.project.startDate.toLocal();
+      final bTime = b.createdAt != null ? b.createdAt!.toLocal() : widget.project.startDate.toLocal();
+      return bTime.compareTo(aTime);
+    });
+
+    for (final plan in sortedPlans) {
+      final time = plan.createdAt != null ? plan.createdAt!.toLocal() : widget.project.startDate.toLocal();
+      final dateStr = DateFormat('yyyy-MM-dd').format(time);
+      
+      String groupHeader;
+      if (dateStr == todayStr) {
+        groupHeader = 'Today';
+      } else if (dateStr == yesterdayStr) {
+        groupHeader = 'Yesterday';
+      } else {
+        groupHeader = DateFormat('MMMM dd, yyyy').format(time);
+      }
+      
+      if (!groupedPlans.containsKey(groupHeader)) {
+        groupedPlans[groupHeader] = [];
+      }
+      groupedPlans[groupHeader]!.add(plan);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Pinned Full-Width Create Plan Bar at the Top ─────────────────
+        Padding(
+          padding: EdgeInsets.only(
+            left: isMobile ? 12 : 24,
+            right: isMobile ? 12 : 24,
+            top: isMobile ? 16 : 24,
+            bottom: 8,
+          ),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 12 : 16,
+              vertical: isMobile ? 12 : 8,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('STRATEGIC PLANS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 2, color: widget.isDark ? Colors.white38 : Colors.black38)),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
+            decoration: BoxDecoration(
+              color: widget.isDark 
+                  ? const Color(0xFF0F111A).withOpacity(0.8)
+                  : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: color.withOpacity(0.15),
+                width: 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(widget.isDark ? 0.2 : 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ]
+            ),
+            child: isMobile 
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            IconsaxPlusLinear.hierarchy_3,
+                            size: 13,
+                            color: color,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'NEW STRATEGIC PLAN',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 9,
+                              letterSpacing: 1.2,
+                              color: widget.isDark ? Colors.white60 : Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
                         controller: _titleCtrl,
-                        style: TextStyle(color: widget.isDark ? Colors.white : Colors.black),
+                        style: TextStyle(
+                          color: widget.isDark ? Colors.white : Colors.black87,
+                          fontSize: 12,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'Plan title...',
+                          hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
                           filled: true,
-                          fillColor: widget.isDark ? Colors.white10 : Colors.white,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: color.withOpacity(0.4)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _descCtrl,
+                        style: TextStyle(
+                          color: widget.isDark ? Colors.white : Colors.black87,
+                          fontSize: 12,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Brief objective...',
+                          hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
+                          filled: true,
+                          fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: color.withOpacity(0.4)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ElevatedButton.icon(
+                        onPressed: _isCreating ? null : _handleCreatePlan,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: color,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: _isCreating 
+                            ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 1.5))
+                            : const Icon(IconsaxPlusLinear.add, size: 14),
+                        label: const Text('DEPLOY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Icon(
+                        IconsaxPlusLinear.hierarchy_3,
+                        size: 13,
+                        color: color,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'NEW PLAN',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 9,
+                          letterSpacing: 1.2,
+                          color: widget.isDark ? Colors.white60 : Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 2,
+                        child: Container(
+                          height: 34,
+                          child: TextField(
+                            controller: _titleCtrl,
+                            style: TextStyle(
+                              color: widget.isDark ? Colors.white : Colors.black87,
+                              fontSize: 12,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Plan title...',
+                              hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
+                              filled: true,
+                              fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(
+                                  color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(
+                                  color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: color.withOpacity(0.4)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 3,
+                        child: Container(
+                          height: 34,
+                          child: TextField(
+                            controller: _descCtrl,
+                            style: TextStyle(
+                              color: widget.isDark ? Colors.white : Colors.black87,
+                              fontSize: 12,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Brief objective (optional)...',
+                              hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
+                              filled: true,
+                              fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(
+                                  color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(
+                                  color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: color.withOpacity(0.4)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        height: 34,
+                        child: ElevatedButton.icon(
+                          onPressed: _isCreating ? null : _handleCreatePlan,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: color,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          icon: _isCreating 
+                              ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 1.5))
+                              : const Icon(IconsaxPlusLinear.add, size: 14),
+                          label: const Text('DEPLOY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+        
+        // ── Scrollable Timeline List Grouped by Date ─────────────────────
+        Expanded(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.only(
+              left: isMobile ? 12 : 24,
+              right: isMobile ? 12 : 24,
+              bottom: isMobile ? 16 : 24,
+              top: 8,
+            ),
+            child: plans.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 60),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(IconsaxPlusLinear.hierarchy, size: 40, color: widget.isDark ? Colors.white10 : Colors.black.withOpacity(0.1)),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No plans yet. Deploy your first plan above.',
+                          style: TextStyle(
+                            color: widget.isDark ? Colors.white38 : Colors.black38,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: groupedPlans.entries.map((entry) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Date divider header capsule with full-width gradient line
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16, bottom: 12),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: widget.isDark ? const Color(0xFF1E2230) : Colors.black.withOpacity(0.04),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: widget.isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+                                  ),
+                                ),
+                                child: Text(
+                                  entry.key.toUpperCase(),
+                                  style: TextStyle(
+                                    color: widget.isDark ? Colors.white70 : Colors.black.withOpacity(0.75),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Container(
+                                  height: 1,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        widget.isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1),
+                                        widget.isDark ? Colors.white.withOpacity(0.0) : Colors.black.withOpacity(0.0),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        // List of plan cards under this date group
+                        ...entry.value.map((plan) => _buildPlanCard(plan, color, isMobile)),
+                      ],
+                    );
+                  }).toList(),
+                ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlanCard(Plan plan, Color color, bool isMobile) {
+    final planTime = plan.createdAt != null ? plan.createdAt!.toLocal() : widget.project.startDate.toLocal();
+    final formattedTime = DateFormat('hh:mm a').format(planTime);
+    final planCode = _formatPlanCode(plan);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: widget.isDark ? const Color(0xFF11131A) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(widget.isDark ? 0.15 : 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Upper section (Information)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Status indicator line (brand color)
+                  Container(
+                    width: 4,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  
+                  // Content
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            // Click to Copy UID Badge
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  Clipboard.setData(ClipboardData(text: plan.id));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: const Text('Copied Plan UID to clipboard!'),
+                                      behavior: SnackBarBehavior.floating,
+                                      backgroundColor: color,
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: color.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: color.withOpacity(0.2), width: 0.8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        planCode,
+                                        style: TextStyle(
+                                          color: color,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.copy_rounded,
+                                        size: 10,
+                                        color: color,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // LIVE status badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF00E676).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'LIVE',
+                                style: TextStyle(
+                                  color: Color(0xFF00E676),
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            // Time Label
+                            Text(
+                              formattedTime,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: widget.isDark ? Colors.white38 : Colors.black38,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          plan.title,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: widget.isDark ? Colors.white : Colors.black87,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Divider
+            Divider(
+              height: 1,
+              color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+            ),
+            
+            // Bottom section: Beautiful Action Row (View Console, Edit, Remove)
+            Container(
+              color: widget.isDark ? const Color(0xFF0D0F14) : const Color(0xFFF1F5F9),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  // View Console Button (Primary Action)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => widget.onOpenConsole(plan),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: color.withOpacity(0.15),
+                        foregroundColor: color,
+                        elevation: 0,
+                        shadowColor: Colors.transparent,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: color.withOpacity(0.25), width: 1),
+                        ),
+                      ),
+                      icon: Icon(IconsaxPlusLinear.category, size: 14, color: color),
+                      label: const Text(
+                        'View Console',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: _isCreating ? null : () async {
-                        if (_titleCtrl.text.trim().isEmpty) return;
-                        setState(() => _isCreating = true);
-                        try {
-                          await widget.ref.read(projectProvider.notifier).addPlan(
-                            widget.project.id, _titleCtrl.text.trim(), _descCtrl.text.trim());
-                          _titleCtrl.clear(); _descCtrl.clear();
-                        } catch(_) {}
-                        setState(() => _isCreating = false);
-                      },
-                      style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18)),
-                      child: _isCreating ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(IconsaxPlusLinear.add, size: 24),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _descCtrl,
-                  maxLines: 2,
-                  style: TextStyle(color: widget.isDark ? Colors.white : Colors.black, fontSize: 12),
-                  decoration: InputDecoration(
-                    hintText: 'Brief objective...',
-                    filled: true,
-                    fillColor: widget.isDark ? Colors.white10 : Colors.white70,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-          plans.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.only(top: 40),
-                child: Center(child: Text('No plans yet. Create one above.',
-                  style: TextStyle(color: widget.isDark ? Colors.white38 : Colors.black38))),
-              )
-            : ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: plans.length,
-                itemBuilder: (ctx, i) => _buildPlanCard(plans[i], color),
+                  const SizedBox(width: 8),
+                  
+                  // Edit Plan Button
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _showEditPlanDialog(plan),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: (widget.isDark ? Colors.white : Colors.black).withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: (widget.isDark ? Colors.white : Colors.black).withOpacity(0.08),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              IconsaxPlusLinear.edit_2,
+                              color: widget.isDark ? Colors.white70 : Colors.black.withOpacity(0.7),
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Edit',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: widget.isDark ? Colors.white70 : Colors.black.withOpacity(0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  
+                  // Delete Plan Button
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _showDeleteConfirmation(plan),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.redAccent.withOpacity(0.2),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              IconsaxPlusLinear.trash,
+                              color: Colors.redAccent,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'Remove',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-
-  Widget _buildPlanCard(Plan plan, Color color) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      decoration: BoxDecoration(
-        color: widget.isDark ? AppColors.darkSurface : AppColors.lightSurface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.1)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
-                  child: Icon(IconsaxPlusLinear.hierarchy, color: color, size: 24),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+  void _showEditPlanDialog(Plan plan) {
+    final titleCtrl = TextEditingController(text: plan.title);
+    
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Edit Plan',
+      barrierColor: Colors.black.withOpacity(0.7),
+      pageBuilder: (ctx, _, __) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: GlassContainer(
+              width: 400,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(child: Text(plan.title.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1))),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: color.withOpacity(0.3))),
-                            child: Text(plan.icode, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-                          ),
-                        ],
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: widget.project.brandColor.withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(IconsaxPlusLinear.edit_2, color: widget.project.brandColor, size: 20),
                       ),
-                      Text(plan.status.toUpperCase(), style: TextStyle(color: widget.isDark ? Colors.white38 : Colors.black38, fontSize: 12)),
+                      const SizedBox(width: 12),
+                      Text(
+                        'EDIT STRATEGIC PLAN',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: widget.isDark ? Colors.white : Colors.black87,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
                     ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: titleCtrl,
+                    style: TextStyle(
+                      color: widget.isDark ? Colors.white : Colors.black87,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'PLAN TITLE',
+                      labelStyle: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.bold,
+                        color: widget.project.brandColor,
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: widget.project.brandColor, width: 2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: Text(
+                            'CANCEL',
+                            style: TextStyle(
+                              color: widget.isDark ? Colors.white38 : Colors.black38,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            final newTitle = titleCtrl.text.trim();
+                            if (newTitle.isEmpty) return;
+                            
+                            try {
+                              await widget.ref.read(projectProvider.notifier).updatePlan(
+                                widget.project.id,
+                                plan.id,
+                                newTitle,
+                                '',
+                              );
+                              if (mounted) {
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: const Text('Plan updated successfully!'),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: widget.project.brandColor,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to update plan: $e'),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: widget.project.brandColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          child: const Text('SAVE CHANGES', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                TextButton.icon(
-                  onPressed: () => widget.ref.read(projectProvider.notifier).removePlan(widget.project.id, plan.id),
-                  icon: const Icon(IconsaxPlusLinear.trash, size: 16, color: Colors.redAccent),
-                  label: const Text('PURGE PLAN', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
-                ),
-                ElevatedButton(
-                  onPressed: () => widget.onOpenConsole(plan),
-                  style: ElevatedButton.styleFrom(backgroundColor: color.withOpacity(0.1), foregroundColor: color, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                  child: const Text('OPEN CONSOLE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                ),
-              ],
+        );
+      },
+    );
+  }
+
+  void _showDeleteConfirmation(Plan plan) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Delete Plan',
+      barrierColor: Colors.black.withOpacity(0.7),
+      pageBuilder: (ctx, _, __) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: GlassContainer(
+              width: 380,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(IconsaxPlusLinear.trash, color: Colors.redAccent, size: 28),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'DELETE STRATEGIC PLAN',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Are you sure you want to permanently delete plan "${plan.title}"? All associated task connections within this console node will be detached.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: widget.isDark ? Colors.white70 : Colors.black54,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: Text(
+                            'CANCEL',
+                            style: TextStyle(
+                              color: widget.isDark ? Colors.white38 : Colors.black38,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            try {
+                              await widget.ref.read(projectProvider.notifier).removePlan(widget.project.id, plan.id);
+                              if (mounted) {
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Plan removed successfully!'),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to remove plan: $e'),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          child: const Text('CONFIRM DELETE', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -2125,18 +2812,287 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
 }
 
 // ── Console Log Analysis ───────────────────────────────────────────────────────
-class _ConsoleLogCentral extends StatelessWidget {
+class _ConsoleLogCentral extends ConsumerStatefulWidget {
   final Project project;
   final bool isDark;
-  const _ConsoleLogCentral({required this.project, required this.isDark});
+  final Function(Plan) onOpenConsole;
+
+  const _ConsoleLogCentral({
+    required this.project,
+    required this.isDark,
+    required this.onOpenConsole,
+  });
+
+  @override
+  ConsumerState<_ConsoleLogCentral> createState() => _ConsoleLogCentralState();
+}
+
+class _ConsoleLogCentralState extends ConsumerState<_ConsoleLogCentral> {
+  String _formatPlanCode(Plan plan) {
+    String suffix = '';
+    if (plan.id.length >= 4 && !RegExp(r'^\d+$').hasMatch(plan.id)) {
+      suffix = plan.id.substring(0, 4).toUpperCase();
+    } else {
+      suffix = plan.icode.length >= 4 
+          ? plan.icode.substring(0, 4).toUpperCase() 
+          : plan.icode.padLeft(4, '0').toUpperCase();
+    }
+    final prefix = widget.project.pid.isEmpty ? 'PLN' : widget.project.pid;
+    return '$prefix-$suffix';
+  }
+
+  void _showEditPlanDialog(Plan plan) {
+    final titleCtrl = TextEditingController(text: plan.title);
+    
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Edit Plan',
+      barrierColor: Colors.black.withOpacity(0.7),
+      pageBuilder: (ctx, _, __) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: GlassContainer(
+              width: 400,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: widget.project.brandColor.withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(IconsaxPlusLinear.edit_2, color: widget.project.brandColor, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'EDIT STRATEGIC PLAN',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: widget.isDark ? Colors.white : Colors.black87,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: titleCtrl,
+                    style: TextStyle(
+                      color: widget.isDark ? Colors.white : Colors.black87,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'PLAN TITLE',
+                      labelStyle: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.bold,
+                        color: widget.project.brandColor,
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: widget.project.brandColor, width: 2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: Text(
+                            'CANCEL',
+                            style: TextStyle(
+                              color: widget.isDark ? Colors.white38 : Colors.black38,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            final newTitle = titleCtrl.text.trim();
+                            if (newTitle.isEmpty) return;
+                            
+                            try {
+                              await ref.read(projectProvider.notifier).updatePlan(
+                                widget.project.id,
+                                plan.id,
+                                newTitle,
+                                '',
+                              );
+                              if (mounted) {
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: const Text('Plan updated successfully!'),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: widget.project.brandColor,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to update plan: $e'),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: widget.project.brandColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          child: const Text('SAVE CHANGES', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showDeleteConfirmation(Plan plan) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Delete Plan',
+      barrierColor: Colors.black.withOpacity(0.7),
+      pageBuilder: (ctx, _, __) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: GlassContainer(
+              width: 380,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(IconsaxPlusLinear.trash, color: Colors.redAccent, size: 28),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'DELETE STRATEGIC PLAN',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Are you sure you want to permanently delete plan "${plan.title}"? All associated task connections within this console node will be detached.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: widget.isDark ? Colors.white70 : Colors.black54,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: Text(
+                            'CANCEL',
+                            style: TextStyle(
+                              color: widget.isDark ? Colors.white38 : Colors.black38,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            try {
+                              await ref.read(projectProvider.notifier).removePlan(widget.project.id, plan.id);
+                              if (mounted) {
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Plan removed successfully!'),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to remove plan: $e'),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          child: const Text('CONFIRM DELETE', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final color = project.brandColor;
-    final plans = project.plans;
+    final color = widget.project.brandColor;
+    final plans = widget.project.plans;
+    final isDark = widget.isDark;
     final isMobile = MediaQuery.of(context).size.width < 768;
 
     return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
       padding: EdgeInsets.all(isMobile ? 16 : 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2144,7 +3100,7 @@ class _ConsoleLogCentral extends StatelessWidget {
           Row(
             children: [
               Icon(IconsaxPlusLinear.document_favorite, color: color, size: 28),
-            const SizedBox(width: 16),
+              const SizedBox(width: 16),
               Text('CONSOLE LOG ANALYSIS', style: TextStyle(
                 fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 0.5,
                 color: isDark ? Colors.white : Colors.black87)),
@@ -2156,94 +3112,643 @@ class _ConsoleLogCentral extends StatelessWidget {
           plans.isEmpty
             ? Padding(
                 padding: const EdgeInsets.only(top: 60),
-                child: Center(child: Text('No active plans to analyze.', style: TextStyle(color: isDark ? Colors.white38 : Colors.black38))),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(IconsaxPlusLinear.document_favorite, size: 48, color: widget.isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                      const SizedBox(height: 16),
+                      Text('No active plans to analyze.', style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 13)),
+                    ],
+                  ),
+                ),
               )
             : GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 400, childAspectRatio: 1.5, crossAxisSpacing: 16, mainAxisSpacing: 16,
+                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 450,
+                  mainAxisExtent: isMobile ? 220 : 200,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                ),
+                itemCount: plans.length,
+                itemBuilder: (ctx, i) {
+                  final plan = plans[i];
+                  return _ConsoleLogCard(
+                    plan: plan,
+                    project: widget.project,
+                    isDark: widget.isDark,
+                    planCode: _formatPlanCode(plan),
+                    onOpenConsole: widget.onOpenConsole,
+                    onEdit: () => _showEditPlanDialog(plan),
+                    onRemove: () => _showDeleteConfirmation(plan),
+                  );
+                },
               ),
-              itemCount: plans.length,
-              itemBuilder: (ctx, i) {
-                final plan = plans[i];
-                return Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.06)),
-                    boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: color.withOpacity(0.3))),
-                            child: Text(plan.icode, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
-                          ),
-                          Text(plan.status.toUpperCase(), style: TextStyle(color: _statusColor(plan.status), fontSize: 10, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(plan.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18), overflow: TextOverflow.ellipsis),
-                      const Spacer(),
-                      const Divider(height: 24),
-                      Row(
-                        children: [
-                          Icon(IconsaxPlusLinear.dollar_square, size: 14, color: color),
-                          const SizedBox(width: 6),
-                          Text('\$${plan.budget.toStringAsFixed(0)}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87, fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 16),
-                          Icon(IconsaxPlusLinear.chart_2, size: 14, color: Colors.grey),
-                          const SizedBox(width: 6),
-                          Text('\$${plan.consumedBudget.toStringAsFixed(0)} used', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
           ],
         ),
       );
   }
+}
+
+class _ConsoleLogCard extends StatefulWidget {
+  final Plan plan;
+  final Project project;
+  final bool isDark;
+  final String planCode;
+  final Function(Plan) onOpenConsole;
+  final VoidCallback onEdit;
+  final VoidCallback onRemove;
+
+  const _ConsoleLogCard({
+    required this.plan,
+    required this.project,
+    required this.isDark,
+    required this.planCode,
+    required this.onOpenConsole,
+    required this.onEdit,
+    required this.onRemove,
+  });
+
+  @override
+  State<_ConsoleLogCard> createState() => _ConsoleLogCardState();
+}
+
+class _ConsoleLogCardState extends State<_ConsoleLogCard> {
+  bool _isHovered = false;
 
   Color _statusColor(String s) {
     switch (s.toLowerCase()) {
-      case 'completed': return Colors.green;
-      case 'active': case 'in_progress': return Colors.blue;
-      case 'delayed': return Colors.orange;
+      case 'completed': return const Color(0xFF10B981);
+      case 'active': case 'in_progress': return const Color(0xFF3B82F6);
+      case 'delayed': return const Color(0xFFF59E0B);
       default: return Colors.grey;
     }
   }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.project.brandColor;
+    final plan = widget.plan;
+    final budgetPercent = plan.budget > 0 ? (plan.consumedBudget / plan.budget).clamp(0.0, 1.0) : 0.0;
+    
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: widget.isDark
+              ? (_isHovered ? const Color(0xFF1E2230).withOpacity(0.9) : const Color(0xFF131622).withOpacity(0.85))
+              : (_isHovered ? Colors.white : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: _isHovered
+                ? color.withOpacity(0.5)
+                : (widget.isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06)),
+            width: _isHovered ? 1.2 : 0.8,
+          ),
+          boxShadow: [
+            if (_isHovered)
+              BoxShadow(
+                color: color.withOpacity(0.18),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
+                spreadRadius: -4,
+              )
+            else
+              BoxShadow(
+                color: Colors.black.withOpacity(widget.isDark ? 0.2 : 0.02),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: plan.id));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Copied Plan UID to clipboard: ${plan.id}'),
+                                behavior: SnackBarBehavior.floating,
+                                backgroundColor: color,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: color.withOpacity(0.2), width: 0.8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  widget.planCode,
+                                  style: TextStyle(
+                                    color: color,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.copy_rounded,
+                                  size: 10,
+                                  color: color,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _statusColor(plan.status).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: _statusColor(plan.status).withOpacity(0.2), width: 0.8),
+                        ),
+                        child: Text(
+                          plan.status.toUpperCase(),
+                          style: TextStyle(
+                            color: _statusColor(plan.status),
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    plan.title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: widget.isDark ? Colors.white : Colors.black87,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'BUDGET TELEMETRY',
+                        style: TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                          color: widget.isDark ? Colors.white38 : Colors.black45,
+                        ),
+                      ),
+                      Text(
+                        '${(budgetPercent * 100).toInt()}% USED',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: budgetPercent > 0.85 ? Colors.redAccent : (widget.isDark ? Colors.white70 : Colors.black87),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: budgetPercent,
+                      minHeight: 5,
+                      backgroundColor: widget.isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        budgetPercent > 0.9 ? Colors.redAccent : (budgetPercent > 0.7 ? Colors.orangeAccent : color),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '\$${NumberFormat.compact().format(plan.consumedBudget)} Consumed',
+                        style: TextStyle(fontSize: 10, color: widget.isDark ? Colors.white38 : Colors.black45, fontWeight: FontWeight.w500),
+                      ),
+                      Text(
+                        'Limit: \$${NumberFormat.compact().format(plan.budget)}',
+                        style: TextStyle(fontSize: 10, color: widget.isDark ? Colors.white60 : Colors.black87, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(),
+            Divider(
+              height: 1,
+              color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+            ),
+            Container(
+              color: widget.isDark ? const Color(0xFF0D0F14).withOpacity(0.5) : const Color(0xFFF1F5F9),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => widget.onOpenConsole(widget.plan),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: color.withOpacity(0.15),
+                        foregroundColor: color,
+                        elevation: 0,
+                        shadowColor: Colors.transparent,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: color.withOpacity(0.25), width: 1),
+                        ),
+                      ),
+                      icon: Icon(IconsaxPlusLinear.category, size: 13, color: color),
+                      label: const Text(
+                        'View Console',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: widget.onEdit,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: (widget.isDark ? Colors.white : Colors.black).withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: (widget.isDark ? Colors.white : Colors.black).withOpacity(0.08),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              IconsaxPlusLinear.edit_2,
+                              color: widget.isDark ? Colors.white70 : Colors.black.withOpacity(0.7),
+                              size: 13,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Edit',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: widget.isDark ? Colors.white70 : Colors.black.withOpacity(0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: widget.onRemove,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.redAccent.withOpacity(0.2),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              IconsaxPlusLinear.trash,
+                              color: Colors.redAccent,
+                              size: 13,
+                            ),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'Remove',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-// ── Strategic Radar Map & Layout ─────────────────────────────────────────────
-class _SimulatedRadarTask {
+// ── Strategic Radar Map & Layout (GitHub-style Pipeline Flow) ─────────────────
+class _NodePosition {
   final String id;
-  final String planId;
-  final String taskNumber;
-  final double grandTotal;
-  final String status;
+  final Offset position;
+  final double width;
+  final double height;
+  _NodePosition({required this.id, required this.position, this.width = 240.0, this.height = 80.0});
+}
 
-  _SimulatedRadarTask({
-    required this.id,
-    required this.planId,
-    required this.taskNumber,
-    required this.grandTotal,
-    required this.status,
+class _FlowGraphNodeCard extends StatefulWidget {
+  final String title;
+  final String subtitle;
+  final String dateText;
+  final String trackingId;
+  final String statusText;
+  final Color statusColor;
+  final Color brandColor;
+  final IconData icon;
+  final VoidCallback? onTap;
+  
+  const _FlowGraphNodeCard({
+    required this.title,
+    required this.subtitle,
+    required this.dateText,
+    required this.trackingId,
+    required this.statusText,
+    required this.statusColor,
+    required this.brandColor,
+    required this.icon,
+    this.onTap,
   });
+  
+  @override
+  State<_FlowGraphNodeCard> createState() => _FlowGraphNodeCardState();
+}
+
+class _FlowGraphNodeCardState extends State<_FlowGraphNodeCard> {
+  bool _isHovered = false;
+  
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedScale(
+        scale: _isHovered ? 1.04 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          width: 240,
+          height: 80,
+          decoration: BoxDecoration(
+            color: isDark
+                ? (_isHovered ? const Color(0xFF1E2230) : const Color(0xFF11131A))
+                : (_isHovered ? const Color(0xFFE2E8F0) : const Color(0xFFF8FAFC)),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: _isHovered 
+                  ? widget.brandColor.withOpacity(0.8)
+                  : (isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08)),
+              width: _isHovered ? 1.8 : 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _isHovered 
+                    ? widget.brandColor.withOpacity(0.25)
+                    : Colors.transparent,
+                blurRadius: 16,
+                spreadRadius: 2,
+                offset: const Offset(0, 4),
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: widget.onTap,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Header: Icon, Subtitle/Status, and UID Copy Button
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: widget.brandColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(widget.icon, color: widget.brandColor, size: 14),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              widget.subtitle,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white54 : Colors.black54,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          // Status Capsule Badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: widget.statusColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: widget.statusColor.withOpacity(0.3), width: 0.8),
+                            ),
+                            child: Text(
+                              widget.statusText,
+                              style: TextStyle(
+                                color: widget.statusColor,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      // Middle: Truncated Title & Glowing Hover Preview
+                      Tooltip(
+                        waitDuration: Duration.zero,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E2230) : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: widget.brandColor.withOpacity(0.3),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            )
+                          ],
+                        ),
+                        richMessage: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${widget.title}\n',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                            TextSpan(
+                              text: 'Status: ${widget.statusText} • ID: ${widget.trackingId}\n',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: widget.brandColor,
+                                height: 1.5,
+                              ),
+                            ),
+                            TextSpan(
+                              text: 'Updated: ${widget.dateText}',
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: isDark ? Colors.white38 : Colors.black38,
+                              ),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          widget.title,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white.withOpacity(0.9) : Colors.black.withOpacity(0.9),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      
+                      // Footer: Time and Click-to-Copy UID
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            widget.dateText,
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w400,
+                              color: isDark ? Colors.white38 : Colors.black38,
+                            ),
+                          ),
+                          // Copy UID Trigger Button
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                Clipboard.setData(ClipboardData(text: widget.trackingId));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Copied to clipboard: ${widget.trackingId}'),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: widget.brandColor,
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(4),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      widget.trackingId,
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w800,
+                                        color: widget.brandColor,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.copy_rounded,
+                                      size: 8,
+                                      color: widget.brandColor,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _StrategicRadarMapCentral extends ConsumerStatefulWidget {
   final Project project;
-  const _StrategicRadarMapCentral({required this.project});
+  final Function(Plan)? onPlanSelected;
+  const _StrategicRadarMapCentral({required this.project, this.onPlanSelected});
 
   @override
   ConsumerState<_StrategicRadarMapCentral> createState() => _StrategicRadarMapCentralState();
@@ -2252,34 +3757,36 @@ class _StrategicRadarMapCentral extends ConsumerStatefulWidget {
 class _StrategicRadarMapCentralState extends ConsumerState<_StrategicRadarMapCentral> with SingleTickerProviderStateMixin {
   final TransformationController _controller = TransformationController();
   late AnimationController _rippleController;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
-    _rippleController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
+    _rippleController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        // Fetch real tasks from the backend in real-time
-        ref.read(taskProvider.notifier).syncWithDatabase(
-          projectId: widget.project.id, 
-          companyId: widget.project.companyId,
-        );
-
-        final double viewportWidth = context.size?.width ?? 800;
-        final double canvasWidth = (widget.project.plans.length * 400).toDouble().clamp(1800, 10000);
-        
-        _controller.value = Matrix4.identity()
-          ..translate(
-            -(canvasWidth / 2 - (viewportWidth / 2)), 
-            -0.0 // Start at the top of the hub
-          );
+        _syncData();
+        _controller.value = Matrix4.identity();
       }
     });
+
+    // Periodic auto-refresh every 10 seconds for real-time sync
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted) _syncData();
+    });
+  }
+
+  void _syncData() {
+    ref.read(taskProvider.notifier).syncWithDatabase(
+      projectId: widget.project.id, 
+      companyId: widget.project.companyId,
+    );
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _rippleController.dispose();
     _controller.dispose();
     super.dispose();
@@ -2289,15 +3796,14 @@ class _StrategicRadarMapCentralState extends ConsumerState<_StrategicRadarMapCen
     final Matrix4 currentMatrix = _controller.value;
     final double scale = currentMatrix.getMaxScaleOnAxis();
     final double newScale = (scale + val).clamp(0.2, 2.0);
-    _controller.value = Matrix4.identity()..scale(newScale);
+    _controller.value = Matrix4.identity()..scale(newScale, newScale, 1.0);
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final double canvasWidth = (widget.project.plans.length * 400).toDouble().clamp(1800, 10000);
-    const double canvasHeight = 1600; // Vertical height for tasks cascading
-
+    final brandColor = widget.project.brandColor;
+    
     // Read real tasks for this project
     final realTasks = ref.watch(taskProvider).allTasks.where((t) => t.projectId == widget.project.id).toList();
     final List<SystemTask> tasks = [];
@@ -2339,13 +3845,56 @@ class _StrategicRadarMapCentralState extends ConsumerState<_StrategicRadarMapCen
       }
     }
 
+    // Dynamic layout coordinate calculations
+    const double verticalSpacing = 95.0;
+    const double projectX = 50.0;
+    const double planX = 400.0;
+    const double taskX = 750.0;
+    
+    double currentY = 40.0;
+    final Map<String, Offset> planPositions = {};
+    final Map<String, Offset> taskPositions = {};
+    
+    for (final plan in widget.project.plans) {
+      final planTasks = tasks.where((t) => t.planId == plan.id).toList();
+      final int taskCount = planTasks.length;
+      
+      // Heights occupied by task node clusters
+      final double clusterHeight = (taskCount > 0 ? taskCount : 1) * verticalSpacing;
+      
+      // Position of plan node centered within task cluster height
+      final double planY = currentY + (clusterHeight / 2) - 40.0;
+      planPositions[plan.id] = Offset(planX, planY);
+      
+      // Position of task nodes vertically
+      for (int j = 0; j < taskCount; j++) {
+        final task = planTasks[j];
+        final double taskY = currentY + (j * verticalSpacing) + (verticalSpacing / 2) - 40.0;
+        taskPositions[task.id] = Offset(taskX, taskY);
+      }
+      
+      currentY += clusterHeight + 40.0; // add vertical plan spacing
+    }
+    
+    // Project Y is in the vertical center of all plans
+    double projectY = 100.0;
+    if (widget.project.plans.isNotEmpty) {
+      final firstPlanY = planPositions[widget.project.plans.first.id]!.dy;
+      final lastPlanY = planPositions[widget.project.plans.last.id]!.dy;
+      projectY = (firstPlanY + lastPlanY) / 2;
+    }
+    final Offset projectPos = Offset(projectX, projectY);
+    
+    final double canvasHeight = currentY.clamp(550.0, 10000.0);
+    const double canvasWidth = 1100.0;
+
     return Stack(
       children: [
         RepaintBoundary(
           child: InteractiveViewer(
             transformationController: _controller,
             constrained: false,
-            boundaryMargin: const EdgeInsets.all(1000), 
+            boundaryMargin: const EdgeInsets.all(500), 
             minScale: 0.1,
             maxScale: 2.0,
             child: Container(
@@ -2353,43 +3902,109 @@ class _StrategicRadarMapCentralState extends ConsumerState<_StrategicRadarMapCen
               height: canvasHeight,
               color: Colors.transparent,
               child: Stack(
-                alignment: Alignment.center,
                 children: [
-                  // Ripple rings on central Hub
+                  // Beautiful Bezier flow paths with light pulse animations
                   AnimatedBuilder(
                     animation: _rippleController,
                     builder: (context, _) {
                       return CustomPaint(
                         size: Size(canvasWidth, canvasHeight),
-                        painter: _RadarRipplePainter(
-                          progress: _rippleController.value,
-                          color: widget.project.brandColor,
-                          canvasWidth: canvasWidth,
+                        painter: _RadarLinkPainter(
+                          project: widget.project,
+                          tasks: tasks,
+                          projectPos: projectPos,
+                          planPositions: planPositions,
+                          taskPositions: taskPositions,
+                          lineColor: brandColor,
+                          pulseValue: _rippleController.value,
                         ),
                       );
                     },
                   ),
 
-                  // Connection links painter
-                  CustomPaint(
-                    size: Size(canvasWidth, canvasHeight),
-                    painter: _RadarLinkPainter(
-                      project: widget.project,
-                      tasks: tasks,
-                      lineColor: widget.project.brandColor,
-                      canvasWidth: canvasWidth,
+                  // 1. Root Project Node
+                  Positioned(
+                    left: projectPos.dx,
+                    top: projectPos.dy,
+                    child: _FlowGraphNodeCard(
+                      title: widget.project.name,
+                      subtitle: widget.project.category.toUpperCase(),
+                      dateText: DateFormat('MMM dd, yyyy').format(widget.project.startDate),
+                      trackingId: widget.project.pid,
+                      statusText: widget.project.status.name.toUpperCase(),
+                      statusColor: widget.project.isApproved ? Colors.green : Colors.orangeAccent,
+                      brandColor: brandColor,
+                      icon: IconsaxPlusLinear.box,
                     ),
                   ),
 
-                  // Node Widgets
-                  ..._buildRadarNodes(context, widget.project, tasks, isDark, canvasWidth),
+                  // 2. Plan Hub Nodes
+                  ...widget.project.plans.map((plan) {
+                    final planPos = planPositions[plan.id]!;
+                    final planTasks = tasks.where((t) => t.planId == plan.id).toList();
+                    final double totalAmount = planTasks.fold(0.0, (sum, t) => sum + t.grandTotal);
+                    
+                    return Positioned(
+                      left: planPos.dx,
+                      top: planPos.dy,
+                      child: _FlowGraphNodeCard(
+                        title: plan.title,
+                        subtitle: '\$${totalAmount.toInt()} BUDGETED',
+                        dateText: 'i-CODE Hub Node',
+                        trackingId: plan.icode,
+                        statusText: plan.status.toUpperCase(),
+                        statusColor: _statusColor(plan.status),
+                        brandColor: brandColor,
+                        icon: IconsaxPlusLinear.hierarchy,
+                        onTap: () {
+                          if (widget.onPlanSelected != null) {
+                            widget.onPlanSelected!(plan);
+                          }
+                        },
+                      ),
+                    );
+                  }),
+
+                  // 3. Task Micro Nodes
+                  ...tasks.map((task) {
+                    final taskPos = taskPositions[task.id];
+                    if (taskPos == null) return const SizedBox.shrink();
+                    final formattedDate = task.dueDate != null 
+                        ? DateFormat('yyyy-MM-dd').format(task.dueDate!)
+                        : 'No Due Date';
+                    
+                    return Positioned(
+                      left: taskPos.dx,
+                      top: taskPos.dy,
+                      child: _FlowGraphNodeCard(
+                        title: task.title,
+                        subtitle: 'ASSIGNEE: ${task.assignee.toUpperCase()}',
+                        dateText: 'DUE: $formattedDate',
+                        trackingId: task.taskNumber,
+                        statusText: task.status.displayName,
+                        statusColor: _getSimulatedStatusColor(task.status),
+                        brandColor: brandColor,
+                        icon: IconsaxPlusLinear.task_square,
+                        onTap: () => showDialog(
+                          context: context,
+                          builder: (context) => _buildTaskDetailsModal(
+                            context: context,
+                            task: task,
+                            color: brandColor,
+                            isDark: isDark,
+                            ref: ref,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
                 ],
               ),
             ),
           ),
         ),
         
-        // Dynamic Zoom Control HUD
+        // Zoom Controls HUD
         Positioned(
           bottom: 20,
           right: 20,
@@ -2409,9 +4024,9 @@ class _StrategicRadarMapCentralState extends ConsumerState<_StrategicRadarMapCen
             ),
             child: Column(
               children: [
-                _zoomBtn(Icons.add, () => _zoom(0.15), widget.project.brandColor, isDark),
+                _zoomBtn(Icons.add, () => _zoom(0.15), brandColor, isDark),
                 const SizedBox(height: 6),
-                _zoomBtn(Icons.remove, () => _zoom(-0.15), widget.project.brandColor, isDark),
+                _zoomBtn(Icons.remove, () => _zoom(-0.15), brandColor, isDark),
               ],
             ),
           ),
@@ -2435,361 +4050,130 @@ class _StrategicRadarMapCentralState extends ConsumerState<_StrategicRadarMapCen
     );
   }
 
-  List<Widget> _buildRadarNodes(BuildContext context, Project project, List<SystemTask> tasks, bool isDark, double canvasWidth) {
-    List<Widget> nodes = [];
-    final double startY = 120;
-    final Offset centerTop = Offset(canvasWidth / 2, startY);
-    
-    // 1. Root Central Project Hub
-    nodes.add(_radarNode(
-      context: context,
-      offset: centerTop,
-      title: project.name,
-      icon: IconsaxPlusLinear.box,
-      color: project.brandColor,
-      isCore: true,
-      isDark: isDark,
-    ));
-
-    final double planY = startY + 240;
-    final double planSpacing = 400;
-    final double taskStartY = planY + 180;
-    final double taskSpacingY = 120;
-
-    final double totalPlansWidth = (project.plans.length - 1) * planSpacing;
-    final double startX = (canvasWidth / 2) - (totalPlansWidth / 2);
-
-    for (int i = 0; i < project.plans.length; i++) {
-      final plan = project.plans[i];
-      final Offset pNodePos = Offset(startX + (i * planSpacing), planY);
-      final planTasks = tasks.where((t) => t.planId == plan.id).toList();
-
-      // 2. Interactive Insight Hub (Branch Nodes)
-      nodes.add(_unifiedPlanHubCentral(
-        offset: pNodePos,
-        plan: plan,
-        tasks: planTasks,
-        color: project.brandColor,
-        isDark: isDark,
-        context: context,
-      ));
-
-      // 3. Cascading Micro-task Nodes
-      for (int j = 0; j < planTasks.length; j++) {
-        final task = planTasks[j];
-        final Offset tNodePos = Offset(pNodePos.dx, taskStartY + (j * taskSpacingY));
-
-        nodes.add(_taskMicroNodeCentral(
-          context: context,
-          offset: tNodePos,
-          task: task,
-          color: _getSimulatedStatusColor(task.status),
-          isDark: isDark,
-        ));
-      }
+  Color _statusColor(String s) {
+    switch (s.toLowerCase()) {
+      case 'completed': return Colors.green;
+      case 'active': case 'in_progress': return Colors.blue;
+      case 'delayed': return Colors.orange;
+      default: return Colors.grey;
     }
-    return nodes;
-  }
-
-  Widget _unifiedPlanHubCentral({
-    required Offset offset, 
-    required Plan plan, 
-    required List<SystemTask> tasks, 
-    required Color color, 
-    required bool isDark,
-    required BuildContext context,
-  }) {
-    final double totalAmount = tasks.fold(0, (sum, t) => sum + t.grandTotal);
-    final todoCount = tasks.where((t) => t.status == TaskStatus.todo).length;
-    final doneCount = tasks.where((t) => t.status == TaskStatus.completed || t.status == TaskStatus.done).length;
-
-    return Positioned(
-      left: offset.dx - 100,
-      top: offset.dy - 40, 
-      child: Column(
-        children: [
-          // Header i-CODE Copy Tab
-          InkWell(
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: plan.icode));
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('i-CODE Copied: ${plan.icode}'),
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: color,
-              ));
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              constraints: const BoxConstraints(maxWidth: 200),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8)],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(IconsaxPlusLinear.status, color: Colors.white, size: 12),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      plan.title.toUpperCase(), 
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 0.5),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          // Insight Stats Body
-          Container(
-            width: 200,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E1E24) : Colors.white,
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-              border: Border.all(color: color.withOpacity(0.3), width: 1.5),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10)],
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _insightItem('CAP', '\$${totalAmount.toInt()}', color),
-                    _insightItem('TODO', '$todoCount', Colors.orangeAccent),
-                    _insightItem('DONE', '$doneCount', Colors.green),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    '${plan.icode} REGISTERED', 
-                    style: TextStyle(color: color, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.8),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ).animate().fadeIn().scale(duration: 400.ms, curve: Curves.easeOutBack),
-    );
-  }
-
-  Widget _insightItem(String label, String val, Color color) {
-    return Column(
-      children: [
-        Text(label, style: const TextStyle(fontSize: 7, color: Colors.grey, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 2),
-        Text(val, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-
-  Color _getSimulatedStatusColor(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.todo: return Colors.orangeAccent;
-      case TaskStatus.inProgress: return Colors.blueAccent;
-      case TaskStatus.completed: return Colors.green;
-      case TaskStatus.review: return Colors.amberAccent;
-      case TaskStatus.done: return Colors.tealAccent;
-    }
-  }
-
-  Widget _taskMicroNodeCentral({
-    required BuildContext context,
-    required Offset offset,
-    required SystemTask task,
-    required Color color,
-    required bool isDark,
-  }) {
-    return Positioned(
-      left: offset.dx - 30,
-      top: offset.dy - 30,
-      child: Tooltip(
-        message: '${task.taskNumber}: ${task.title}\nStatus: ${task.status.displayName}',
-        child: InkWell(
-          onTap: () => showDialog(
-            context: context,
-            builder: (context) => _buildTaskDetailsModal(
-              context: context,
-              task: task,
-              color: color,
-              isDark: isDark,
-              ref: ref,
-            ),
-          ),
-          borderRadius: BorderRadius.circular(20),
-          child: Column(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E1E24) : Colors.white,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: color, width: 2),
-                  boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 6)],
-                ),
-                child: Icon(IconsaxPlusLinear.task_square, color: color, size: 16),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  task.taskNumber, 
-                  style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ).animate().fadeIn(delay: 200.ms).scale(),
-    );
-  }
-
-  Widget _radarNode({
-    required BuildContext context,
-    required Offset offset,
-    required String title,
-    required IconData icon,
-    required Color color,
-    bool isCore = false,
-    required bool isDark,
-  }) {
-    return Positioned(
-      left: offset.dx - (isCore ? 50 : 40),
-      top: offset.dy - (isCore ? 50 : 40),
-      child: Column(
-        children: [
-          Container(
-            width: isCore ? 100 : 80,
-            height: isCore ? 100 : 80,
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E1E24) : Colors.white,
-              shape: BoxShape.circle,
-              border: Border.all(color: color, width: isCore ? 3.5 : 2),
-              boxShadow: [
-                BoxShadow(color: color.withOpacity(0.4), blurRadius: 15, spreadRadius: isCore ? 4 : 1),
-              ],
-            ),
-            child: Icon(icon, color: color, size: isCore ? 36 : 24),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              title.toUpperCase(), 
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 9, letterSpacing: 0.5),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
-    );
   }
 }
 
-// ── Radar Custom Painters ────────────────────────────────────────────────────
-class _RadarRipplePainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final double canvasWidth;
-
-  _RadarRipplePainter({required this.progress, required this.color, required this.canvasWidth});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(canvasWidth / 2, 120); // Anchored to root Central project hub
-    final paint = Paint()
-      ..color = color.withOpacity((1 - progress) * 0.25)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-
-    canvas.drawCircle(center, 90 + (progress * 150), paint);
-    canvas.drawCircle(center, 90 + ((progress + 0.5) % 1.0 * 150), paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
-
+// ── Pipeline Cubic Bezier Link Painter ────────────────────────────────────────
 class _RadarLinkPainter extends CustomPainter {
   final Project project;
   final List<SystemTask> tasks;
+  final Offset projectPos;
+  final Map<String, Offset> planPositions;
+  final Map<String, Offset> taskPositions;
   final Color lineColor;
-  final double canvasWidth;
+  final double pulseValue;
 
-  _RadarLinkPainter({required this.project, required this.tasks, required this.lineColor, required this.canvasWidth});
+  _RadarLinkPainter({
+    required this.project,
+    required this.tasks,
+    required this.projectPos,
+    required this.planPositions,
+    required this.taskPositions,
+    required this.lineColor,
+    required this.pulseValue,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = lineColor.withOpacity(0.25)
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
+    final startPort = Offset(projectPos.dx + 240.0, projectPos.dy + 40.0);
 
-    final double startY = 120;
-    final Offset centerTop = Offset(canvasWidth / 2, startY);
-    final double planY = startY + 240;
-    final double planSpacing = 400;
-    final double taskStartY = planY + 180;
-    final double taskSpacingY = 120;
+    // 1. Draw curves from Project right edge to Plans left edge
+    for (final plan in project.plans) {
+      final planPos = planPositions[plan.id];
+      if (planPos != null) {
+        final endPort = Offset(planPos.dx, planPos.dy + 40.0);
+        
+        final path = Path()
+          ..moveTo(startPort.dx, startPort.dy)
+          ..cubicTo(
+            startPort.dx + 80.0, startPort.dy,
+            endPort.dx - 80.0, endPort.dy,
+            endPort.dx, endPort.dy,
+          );
 
-    final double totalPlansWidth = (project.plans.length - 1) * planSpacing;
-    final double startX = (canvasWidth / 2) - (totalPlansWidth / 2);
+        // Draw background bezier path
+        canvas.drawPath(
+          path, 
+          Paint()
+            ..color = lineColor.withOpacity(0.18)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.0
+            ..strokeCap = StrokeCap.round,
+        );
 
-    // Main horizontal network bus line
-    if (project.plans.length > 1) {
-      canvas.drawLine(
-        Offset(startX, planY - 100), 
-        Offset(startX + totalPlansWidth, planY - 100), 
-        paint
-      );
+        // Draw active light pulse particle
+        drawPulse(canvas, path, Paint()..color = lineColor, pulseValue);
+      }
     }
 
-    // Line connecting Hub to Drive Bus Line
-    canvas.drawLine(centerTop, Offset(canvasWidth / 2, planY - 100), paint);
+    // 2. Draw curves from Plans right edge to Tasks left edge
+    for (final plan in project.plans) {
+      final planPos = planPositions[plan.id];
+      if (planPos != null) {
+        final planTasks = tasks.where((t) => t.planId == plan.id).toList();
+        final planStartPort = Offset(planPos.dx + 240.0, planPos.dy + 40.0);
+        
+        for (final task in planTasks) {
+          final taskPos = taskPositions[task.id];
+          if (taskPos != null) {
+            final endPort = Offset(taskPos.dx, taskPos.dy + 40.0);
+            
+            final path = Path()
+              ..moveTo(planStartPort.dx, planStartPort.dy)
+              ..cubicTo(
+                planStartPort.dx + 80.0, planStartPort.dy,
+                endPort.dx - 80.0, endPort.dy,
+                endPort.dx, endPort.dy,
+              );
 
-    for (int i = 0; i < project.plans.length; i++) {
-      final plan = project.plans[i];
-      final Offset pNodePos = Offset(startX + (i * planSpacing), planY);
+            final taskColor = _getSimulatedStatusColor(task.status);
+            
+            // Draw background bezier path matching task status color
+            canvas.drawPath(
+              path, 
+              Paint()
+                ..color = taskColor.withOpacity(0.15)
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.5
+                ..strokeCap = StrokeCap.round,
+            );
 
-      // Vertical line drops from Bus line down to Plan Hubs
-      canvas.drawLine(Offset(pNodePos.dx, planY - 100), Offset(pNodePos.dx, planY - 40), paint);
+            // Draw active status-themed light pulse particle
+            drawPulse(canvas, path, Paint()..color = taskColor, pulseValue);
+          }
+        }
+      }
+    }
+  }
 
-      final planTasks = tasks.where((t) => t.planId == plan.id).toList();
-      final taskPaint = Paint()
-        ..strokeWidth = 1.5
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke;
-
-      // Cascading line drop from bottom of Plan Hub down to tasks
-      if (planTasks.isNotEmpty) {
-        final double lastTaskY = taskStartY + ((planTasks.length - 1) * taskSpacingY);
-        canvas.drawLine(
-          Offset(pNodePos.dx, planY + 100), 
-          Offset(pNodePos.dx, lastTaskY), 
-          taskPaint..color = lineColor.withOpacity(0.12)
-        );
+  void drawPulse(Canvas canvas, Path path, Paint paint, double t) {
+    final metrics = path.computeMetrics();
+    for (final metric in metrics) {
+      final double length = metric.length;
+      final double targetLength = length * t;
+      final tangent = metric.getTangentForOffset(targetLength);
+      if (tangent != null) {
+        final position = tangent.position;
+        
+        // Neon outer glow layer
+        final glowPaint = Paint()
+          ..color = paint.color.withOpacity(0.6)
+          ..style = PaintingStyle.fill
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0);
+        canvas.drawCircle(position, 7.0, glowPaint);
+        
+        // High intensity solid core
+        final corePaint = Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(position, 2.5, corePaint);
       }
     }
   }
@@ -3001,4 +4385,5 @@ Widget _buildTaskDetailsModal({
     ),
   );
 }
+
 

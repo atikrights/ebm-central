@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -30,6 +31,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   @override
   Widget build(BuildContext context) {
     final projectState = ref.watch(projectProvider);
+    ref.watch(companyProvider); // Keep company cache hot and reactive
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
@@ -337,16 +339,105 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     );
   }
 
+  String _getDateGroup(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
+    final startOfLastWeek = startOfWeek.subtract(const Duration(days: 7));
+    
+    final localDate = date.toLocal();
+    final compareDate = DateTime(localDate.year, localDate.month, localDate.day);
+    
+    if (compareDate.isAfter(today) || compareDate == today) {
+      return 'TODAY';
+    } else if (compareDate == yesterday) {
+      return 'YESTERDAY';
+    } else if (compareDate.isAfter(startOfWeek)) {
+      return 'THIS WEEK';
+    } else if (compareDate.isAfter(startOfLastWeek)) {
+      return 'LAST WEEK';
+    } else if (compareDate.year == now.year && compareDate.month == now.month) {
+      return 'THIS MONTH';
+    } else {
+      return DateFormat('MMMM yyyy').format(localDate).toUpperCase();
+    }
+  }
+
+  Widget _buildGroupDivider(String group, bool isDark) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            group,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+              color: isDark ? Colors.white70 : Colors.black87,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(
+            height: 1,
+            color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildListView(List<Project> projects, bool isDark) {
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
-    return ListView.separated(
-      itemCount: projects.length,
+
+    // Sort projects: newest first
+    final sortedProjects = List<Project>.from(projects)
+      ..sort((a, b) {
+        final dateA = a.updatedAt ?? a.createdAt ?? a.startDate;
+        final dateB = b.updatedAt ?? b.createdAt ?? b.startDate;
+        return dateB.compareTo(dateA);
+      });
+
+    final List<Widget> listItems = [];
+    String? lastGroup;
+
+    for (int i = 0; i < sortedProjects.length; i++) {
+      final project = sortedProjects[i];
+      final date = project.updatedAt ?? project.createdAt ?? project.startDate;
+      final group = _getDateGroup(date);
+
+      if (group != lastGroup) {
+        lastGroup = group;
+        listItems.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 14, bottom: 8),
+            child: _buildGroupDivider(group, isDark),
+          ),
+        );
+      }
+
+      listItems.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 2), // 2px list space as requested
+          child: _ProjectListItem(project: project, isDark: isDark)
+              .animate()
+              .fadeIn(delay: (i * 50).ms)
+              .slideX(begin: 0.1, curve: Curves.easeOutQuad),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: listItems.length,
       padding: EdgeInsets.fromLTRB(isDesktop ? 24 : 16, 0, isDesktop ? 24 : 16, 80),
-      separatorBuilder: (context, index) => const SizedBox(height: 2), // 2px list space as requested
-      itemBuilder: (context, index) => _ProjectListItem(project: projects[index], isDark: isDark)
-          .animate()
-          .fadeIn(delay: (index * 50).ms)
-          .slideX(begin: 0.1, curve: Curves.easeOutQuad),
+      itemBuilder: (context, index) => listItems[index],
     );
   }
 
@@ -603,7 +694,57 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
             const Text('Successfully Created', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
             const SizedBox(height: 8),
             Text('Project "${project.name}" is now live.', textAlign: TextAlign.center, style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 13)),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
+
+            // ── Company Attachment Confirmation Badge ──────────────────────
+            if (project.companyId != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3B82F6).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.link_rounded, size: 14, color: Color(0xFF3B82F6)),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        project.companyName != null
+                            ? 'Linked to ${project.companyName}'
+                            : 'Company attached',
+                        style: const TextStyle(
+                          color: Color(0xFF3B82F6),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.orange.withOpacity(0.25)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.lock_outline_rounded, size: 14, color: Colors.orange),
+                    SizedBox(width: 6),
+                    Text('Private workspace · No company', style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+
+            const SizedBox(height: 24),
             _buildFieldLabel('PROJECT PID (CLICK TO COPY)', isDark),
             const SizedBox(height: 12),
             InkWell(
@@ -647,6 +788,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
         ),
       ),
     ).animate().scale(curve: Curves.easeOutBack, duration: 400.ms).fadeIn();
+
   }
 
   Widget _buildFieldLabel(String label, bool isDark) {
@@ -799,6 +941,48 @@ class _ProjectListItem extends ConsumerStatefulWidget {
 
 class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
   bool _isHovered = false;
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh the relative elapsed time every 10 seconds in real-time
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  String _formatLastUpdated(Project project) {
+    final date = (project.updatedAt ?? project.createdAt ?? project.startDate).toLocal();
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    
+    String relativeTime;
+    if (diff.isNegative) {
+      relativeTime = 'Just now';
+    } else if (diff.inSeconds < 60) {
+      relativeTime = 'Just now';
+    } else if (diff.inMinutes < 60) {
+      relativeTime = '${diff.inMinutes}m ago';
+    } else if (diff.inHours < 24) {
+      relativeTime = '${diff.inHours}h ago';
+    } else if (diff.inDays < 7) {
+      relativeTime = '${diff.inDays}d ago';
+    } else {
+      relativeTime = DateFormat('MMM d, yyyy').format(date);
+    }
+    
+    final exactTime = DateFormat('jm').format(date);
+    return 'Updated: $relativeTime ($exactTime)';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -974,6 +1158,25 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
                     ),
                     const SizedBox(height: 4),
                     _buildPidCopy(),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          IconsaxPlusLinear.clock,
+                          size: 10,
+                          color: widget.isDark ? Colors.white38 : Colors.black38,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _formatLastUpdated(widget.project),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: widget.isDark ? Colors.white38 : Colors.black38,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -1112,6 +1315,25 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
                         ),
                         const SizedBox(height: 4),
                         _buildPidCopy(),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              IconsaxPlusLinear.clock,
+                              size: 10,
+                              color: widget.isDark ? Colors.white38 : Colors.black38,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatLastUpdated(widget.project),
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: widget.isDark ? Colors.white38 : Colors.black38,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -1260,9 +1482,24 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
 
   Widget _buildCompanyInfo() {
     final hasCompany = widget.project.companyId != null && widget.project.companyId != 'null' && widget.project.companyId != '';
+    final userRole = ref.watch(authProvider).role ?? '';
+    final canManageProjects = ['admin', 'sub_admin', 'manager', 'super_admin'].contains(userRole.toLowerCase());
+
     if (!hasCompany) {
       return InkWell(
-        onTap: () => (context.findAncestorStateOfType<_ProjectsScreenState>())?.showAttachCompanyDialog(context, widget.project),
+        onTap: () {
+          if (canManageProjects) {
+            (context.findAncestorStateOfType<_ProjectsScreenState>())?.showAttachCompanyDialog(context, widget.project);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('🔒 Access Denied: Only Admin or Sub-Admin can connect companies.'),
+                backgroundColor: Colors.redAccent,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        },
         borderRadius: BorderRadius.circular(8),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

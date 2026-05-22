@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -62,6 +63,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     }
   }
 
+  Timer? _pollTimer;
+
   void _initWebSocket() {
     final ws = ref.read(webSocketServiceProvider);
     final auth = ref.read(authProvider);
@@ -72,6 +75,15 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         token: auth.token,
       );
       ws.addListener(_handleWsEvent);
+
+      if (!ws.isSupported) {
+        _pollTimer?.cancel();
+        _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+          if (mounted) {
+            _loadConversations();
+          }
+        });
+      }
     }
   }
 
@@ -102,6 +114,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     ref.read(webSocketServiceProvider).removeListener(_handleWsEvent);
     super.dispose();
   }

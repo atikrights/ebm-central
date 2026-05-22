@@ -41,6 +41,11 @@ class WebSocketService {
     }
   }
 
+  /// Whether real-time WebSocket (Pusher) is supported on this platform.
+  /// On unsupported platforms (Windows / Linux / macOS), callers should
+  /// fall back to periodic HTTP polling.
+  bool get isSupported => _isPusherSupported;
+
   void addListener(Function(PusherEvent) listener) {
     if (!_listeners.contains(listener)) {
       _listeners.add(listener);

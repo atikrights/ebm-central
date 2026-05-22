@@ -12,6 +12,7 @@ class TaskProvider extends ChangeNotifier {
 
   TaskProvider(this._ref) {
     _startPeriodicSync();
+    syncWithDatabase();
   }
 
   void _startPeriodicSync() {

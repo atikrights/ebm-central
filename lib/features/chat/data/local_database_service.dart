@@ -13,14 +13,16 @@ class LocalDatabaseService {
 
   LocalDatabaseService._internal();
 
-  Future<Database> get database async {
+  Future<Database?> get database async {
+    if (kIsWeb) return null;
     if (_database != null) return _database!;
     _database = await _initDatabase();
-    return _database!;
+    return _database;
   }
 
-  Future<Database> _initDatabase() async {
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+  Future<Database?> _initDatabase() async {
+    if (kIsWeb) return null;
+    if (Platform.isWindows || Platform.isLinux) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
@@ -69,7 +71,9 @@ class LocalDatabaseService {
   // --- Helpers ---
   
   Future<void> saveMessage(Map<String, dynamic> msg) async {
+    if (kIsWeb) return;
     final db = await database;
+    if (db == null) return;
     await db.insert('messages', msg, conflictAlgorithm: ConflictAlgorithm.replace);
     
     // Update session too
@@ -77,7 +81,9 @@ class LocalDatabaseService {
   }
 
   Future<void> updateSessionFromMessage(Map<String, dynamic> msg) async {
+    if (kIsWeb) return;
     final db = await database;
+    if (db == null) return;
     final partnerId = msg['is_mine'] == 1 ? msg['receiver_id'].toString() : msg['sender_id'].toString();
     
     await db.insert('sessions', {
@@ -89,7 +95,9 @@ class LocalDatabaseService {
   }
 
   Future<List<Map<String, dynamic>>> getMessages(String partnerId) async {
+    if (kIsWeb) return [];
     final db = await database;
+    if (db == null) return [];
     return await db.query('messages', 
       where: 'sender_id = ? OR receiver_id = ?', 
       whereArgs: [partnerId, partnerId],

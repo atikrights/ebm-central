@@ -94,6 +94,8 @@ class SystemTask {
   final String? projectId; // Linked to a specific Project
   final bool isArchived;
   final bool isApproved;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   SystemTask({
     required this.id,
@@ -118,6 +120,8 @@ class SystemTask {
     this.projectId,
     this.isArchived = false,
     this.isApproved = true,
+    this.createdAt,
+    this.updatedAt,
   });
 
   double get totalSubTaskCost => subTasks.fold(0.0, (sum, s) => sum + s.additionalCost);
@@ -129,7 +133,7 @@ class SystemTask {
     String? author, String? assignee, DateTime? dueDate, DateTime? startDate, DateTime? endDate,
     String? location, List<TaskDocument>? documents, List<SubTask>? subTasks,
     List<RoadmapStep>? roadmapSteps, List<String>? subTaskIds, List<TaskComment>? comments, String? planId, String? projectId,
-    bool? isArchived, bool? isApproved,
+    bool? isArchived, bool? isApproved, DateTime? createdAt, DateTime? updatedAt,
   }) {
     return SystemTask(
       id: id ?? this.id, taskNumber: taskNumber ?? this.taskNumber,
@@ -143,6 +147,7 @@ class SystemTask {
       roadmapSteps: roadmapSteps ?? this.roadmapSteps, subTaskIds: subTaskIds ?? this.subTaskIds,
       comments: comments ?? this.comments, planId: planId ?? this.planId, projectId: projectId ?? this.projectId,
       isArchived: isArchived ?? this.isArchived, isApproved: isApproved ?? this.isApproved,
+      createdAt: createdAt ?? this.createdAt, updatedAt: updatedAt ?? this.updatedAt,
     );
   }
   Map<String, dynamic> toMap() {
@@ -165,6 +170,8 @@ class SystemTask {
       'projectId': projectId,
       'isArchived': isArchived,
       'isApproved': isApproved,
+      'created_at': createdAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
     };
   }
 
@@ -179,9 +186,9 @@ class SystemTask {
       allocatedCost: (map['allocatedCost'] ?? map['allocated_cost'] ?? 0).toDouble(),
       author: map['author'] ?? 'Admin',
       assignee: map['assignee'] ?? 'Unassigned',
-      dueDate: map['dueDate'] != null || map['due_date'] != null ? DateTime.parse(map['dueDate'] ?? map['due_date']) : null,
-      startDate: map['startDate'] != null || map['start_date'] != null ? DateTime.parse(map['startDate'] ?? map['start_date']) : null,
-      endDate: map['endDate'] != null || map['end_date'] != null ? DateTime.parse(map['endDate'] ?? map['end_date']) : null,
+      dueDate: _parseDateTime(map['dueDate'] ?? map['due_date']),
+      startDate: _parseDateTime(map['startDate'] ?? map['start_date']),
+      endDate: _parseDateTime(map['endDate'] ?? map['end_date']),
       location: map['location'] ?? '',
       comments: map['comments'] != null
           ? List<TaskComment>.from(map['comments'].map((x) => TaskComment.fromMap(x)))
@@ -190,7 +197,32 @@ class SystemTask {
       projectId: map['projectId']?.toString() ?? map['project_id']?.toString(),
       isArchived: _parseBool(map['isArchived'] ?? map['is_archived'] ?? false),
       isApproved: _parseBool(map['isApproved'] ?? map['is_approved'] ?? true),
+      createdAt: _parseDateTime(map['createdAt'] ?? map['created_at']),
+      updatedAt: _parseDateTime(map['updatedAt'] ?? map['updated_at']),
     );
+  }
+
+  static DateTime? _parseDateTime(dynamic val) {
+    if (val == null) return null;
+    if (val is DateTime) return val;
+    final str = val.toString().trim();
+    if (str.isEmpty) return null;
+    try {
+      return DateTime.parse(str).toLocal();
+    } catch (_) {
+      try {
+        final normalized = str.replaceAll(' ', 'T');
+        final suffix = normalized.contains('T') && 
+                       !normalized.contains('Z') && 
+                       !normalized.contains('+') && 
+                       !RegExp(r'-\d{2}:\d{2}$').hasMatch(normalized)
+            ? 'Z'
+            : '';
+        return DateTime.parse('$normalized$suffix').toLocal();
+      } catch (_) {
+        return null;
+      }
+    }
   }
 
   static TaskStatus _parseStatus(dynamic val) {

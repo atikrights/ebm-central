@@ -11,6 +11,18 @@ import '../../projects/providers/project_provider.dart';
 import '../../projects/models/project.dart';
 import '../../workplace/providers/company_provider.dart';
 
+abstract class TaskListItem {}
+
+class TaskHeaderItem extends TaskListItem {
+  final String title;
+  TaskHeaderItem(this.title);
+}
+
+class TaskCardItem extends TaskListItem {
+  final SystemTask task;
+  TaskCardItem(this.task);
+}
+
 class TasksScreen extends ConsumerStatefulWidget {
   const TasksScreen({super.key});
 
@@ -54,6 +66,27 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
       if (_tabCtrl.index == 0) return !t.isArchived;
       return t.isArchived;
     }).toList();
+
+    // Sort tasks descending by createdAt
+    allTasks.sort((a, b) {
+      final aTime = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bTime.compareTo(aTime);
+    });
+
+    // Group tasks under headers (TODAY, YESTERDAY, specific date formatted headers)
+    final List<TaskListItem> listItems = [];
+    String lastHeader = '';
+    for (final task in allTasks) {
+      final dateHeader = task.createdAt != null
+          ? _getDateHeader(task.createdAt!)
+          : 'DRAFTS & OTHERS';
+      if (dateHeader != lastHeader) {
+        listItems.add(TaskHeaderItem(dateHeader));
+        lastHeader = dateHeader;
+      }
+      listItems.add(TaskCardItem(task));
+    }
 
     final textColor = isDark ? Colors.white : Colors.black87;
     final subColor = isDark ? Colors.white54 : Colors.black54;
@@ -109,7 +142,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
 
           // Task List
           Expanded(
-            child: allTasks.isEmpty
+            child: listItems.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -122,9 +155,14 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
                   )
                 : ListView.builder(
                     padding: EdgeInsets.fromLTRB(isDesktop ? 24 : 16, 8, isDesktop ? 24 : 16, 8),
-                    itemCount: allTasks.length,
+                    itemCount: listItems.length,
                     itemBuilder: (context, index) {
-                      final task = allTasks[index];
+                      final item = listItems[index];
+                      if (item is TaskHeaderItem) {
+                        return _buildDateHeaderWidget(item.title, isDark);
+                      }
+
+                      final task = (item as TaskCardItem).task;
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: GestureDetector(
@@ -134,59 +172,94 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
                           child: GlassContainer(
                             borderRadius: 12.0,
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: _getStatusColor(task.status).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: _getStatusColor(task.status).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(IconsaxPlusBold.task, color: _getStatusColor(task.status), size: 20),
                                 ),
-                                child: Icon(IconsaxPlusBold.task, color: _getStatusColor(task.status), size: 20),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        task.title,
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'ID: ${task.taskNumber} • ${task.status.displayName}',
+                                        style: TextStyle(fontSize: 12, color: subColor),
+                                      ),
+                                      if (task.createdAt != null) ...[
+                                        const SizedBox(height: 5),
+                                        Wrap(
+                                          spacing: 12,
+                                          runSpacing: 4,
+                                          crossAxisAlignment: WrapCrossAlignment.center,
+                                          children: [
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(IconsaxPlusLinear.calendar_1, size: 12, color: subColor.withOpacity(0.55)),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'Created: ${_formatDateTime(task.createdAt)}',
+                                                  style: TextStyle(fontSize: 10.5, color: subColor.withOpacity(0.8), letterSpacing: -0.2),
+                                                ),
+                                              ],
+                                            ),
+                                            if (task.updatedAt != null && 
+                                                task.createdAt != null && 
+                                                task.updatedAt!.difference(task.createdAt!).inSeconds > 5)
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(IconsaxPlusLinear.edit_2, size: 11, color: Colors.blue.withOpacity(0.7)),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    'Updated: ${_formatDateTime(task.updatedAt)}',
+                                                    style: TextStyle(fontSize: 10.5, color: Colors.blue.withOpacity(0.85), fontWeight: FontWeight.w500, letterSpacing: -0.2),
+                                                  ),
+                                                ],
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    Text(
-                                      task.title,
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: _getStatusColor(task.status).withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        task.status.displayName,
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getStatusColor(task.status)),
+                                      ),
                                     ),
-                                    const SizedBox(height: 4),
+                                    const SizedBox(height: 6),
                                     Text(
-                                      'ID: ${task.taskNumber} • ${task.status.displayName}',
-                                      style: TextStyle(fontSize: 12, color: subColor),
+                                      task.dueDate != null ? task.dueDate.toString().substring(0, 10) : 'No due date',
+                                      style: TextStyle(fontSize: 11, color: subColor),
                                     ),
                                   ],
                                 ),
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: _getStatusColor(task.status).withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      task.status.displayName,
-                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getStatusColor(task.status)),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    task.dueDate != null ? task.dueDate.toString().substring(0, 10) : 'No due date',
-                                    style: TextStyle(fontSize: 11, color: subColor),
-                                  ),
-                                ],
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ).animate().fadeIn(delay: Duration(milliseconds: 50 * index)).slideX();
+                      ).animate().fadeIn(delay: Duration(milliseconds: 25 * index)).slideX();
                     },
                   ),
           ),
@@ -388,6 +461,74 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
         ),
       ),
     );
+  }
+
+  String _getDateHeader(DateTime dateTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final taskDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+
+    if (taskDate == today) {
+      return 'TODAY';
+    } else if (taskDate == yesterday) {
+      return 'YESTERDAY';
+    } else {
+      final months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      return '${dateTime.day} ${months[dateTime.month - 1]} ${dateTime.year}';
+    }
+  }
+
+  Widget _buildDateHeaderWidget(String title, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 14, bottom: 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+              ),
+            ),
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.0,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Divider(
+              color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
+              thickness: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDateTime(DateTime? dateTime) {
+    if (dateTime == null) return 'N/A';
+    final localTime = dateTime.toLocal();
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final year = localTime.year;
+    final month = months[localTime.month - 1];
+    final day = localTime.day.toString().padLeft(2, '0');
+    
+    final hour24 = localTime.hour;
+    final hour12 = hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
+    final minute = localTime.minute.toString().padLeft(2, '0');
+    final amPm = hour24 >= 12 ? 'PM' : 'AM';
+    
+    return '$day $month $year, ${hour12.toString().padLeft(2, '0')}:$minute $amPm';
   }
 
   Color _getStatusColor(TaskStatus status) {

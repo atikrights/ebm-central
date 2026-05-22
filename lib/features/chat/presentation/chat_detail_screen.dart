@@ -130,6 +130,8 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     _loadMessages();
   }
 
+  Timer? _pollTimer;
+
   void _initWebSocket() {
     final ws = ref.read(webSocketServiceProvider);
     final auth = ref.read(authProvider);
@@ -146,6 +148,15 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
         },
       );
       ws.addListener(_handleWsEvent);
+
+      if (!ws.isSupported) {
+        _pollTimer?.cancel();
+        _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+          if (mounted) {
+            _loadMessages(isSilent: true);
+          }
+        });
+      }
     }
   }
 
@@ -579,6 +590,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     if (_instance == this) _instance = null;
     CallController.instance.removeListener(_onCallStateChanged);
     _callTicker?.cancel();
