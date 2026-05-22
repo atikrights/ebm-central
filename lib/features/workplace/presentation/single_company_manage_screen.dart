@@ -21,6 +21,11 @@ import '../providers/company_provider.dart';
 import '../../projects/providers/project_provider.dart';
 import '../../projects/models/project.dart' as pmod;
 import '../../tasks/presentation/tasks_screen.dart';
+import '../models/company_external_quota.dart';
+import '../providers/company_external_quota_provider.dart';
+import 'widgets/quota_manage_dialog.dart';
+import 'widgets/attach_project_dialog.dart';
+import 'quota_edit_screen.dart';
 
 class WordLimitFormatter extends TextInputFormatter {
   final int maxWords;
@@ -55,6 +60,7 @@ class SingleCompanyManageScreen extends ConsumerStatefulWidget {
 
 class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageScreen> {
   int _selectedTabIndex = 0;
+  int _settingsTabIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   static const double kHeaderHeight = 54.0;
   static const double kSidebarWidth = 240.0;
@@ -72,9 +78,17 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
 
   // Configure Tab State
   final TextEditingController _pidController = TextEditingController();
+  final TextEditingController _attachedSearchController = TextEditingController();
+  String _attachedSearchQuery = '';
+  final Set<pmod.ProjectStatus> _selectedStatuses = {};
   pmod.Project? _searchedProject;
   bool _isSearching = false;
   bool _isActioning = false;
+
+  // External Tab – Quota search & filter
+  final TextEditingController _quotaSearchController = TextEditingController();
+  String _quotaSearchQuery = '';
+  String _quotaTagFilter = '';
 
   @override
   void initState() {
@@ -89,6 +103,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
   @override
   void dispose() {
     _pidController.dispose();
+    _attachedSearchController.dispose();
+    _quotaSearchController.dispose();
     super.dispose();
   }
 
@@ -184,6 +200,125 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
         );
       }
     }
+  }
+
+  String _getStatusName(pmod.ProjectStatus status) {
+    switch (status) {
+      case pmod.ProjectStatus.active: return 'Active';
+      case pmod.ProjectStatus.completed: return 'Completed';
+      case pmod.ProjectStatus.onHold: return 'On Hold';
+      case pmod.ProjectStatus.planning: return 'Planning';
+      case pmod.ProjectStatus.draft: return 'Draft';
+    }
+  }
+
+  Color _getStatusColor(pmod.ProjectStatus status) {
+    switch (status) {
+      case pmod.ProjectStatus.active: return AppColors.success;
+      case pmod.ProjectStatus.completed: return Colors.blue;
+      case pmod.ProjectStatus.onHold: return Colors.orange;
+      case pmod.ProjectStatus.planning: return Colors.purple;
+      case pmod.ProjectStatus.draft: return Colors.grey;
+    }
+  }
+
+  Map<String, List<pmod.Project>> _groupProjectsByDate(List<pmod.Project> projects) {
+    final Map<String, List<pmod.Project>> groups = {};
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    for (final project in projects) {
+      final dateToUse = project.updatedAt ?? project.createdAt ?? project.startDate;
+      final projectDate = DateTime(dateToUse.year, dateToUse.month, dateToUse.day);
+
+      String header;
+      if (projectDate == today) {
+        header = 'Today';
+      } else if (projectDate == yesterday) {
+        header = 'Yesterday';
+      } else {
+        header = DateFormat('MMMM dd, yyyy').format(projectDate);
+      }
+
+      if (!groups.containsKey(header)) {
+        groups[header] = [];
+      }
+      groups[header]!.add(project);
+    }
+    return groups;
+  }
+
+  Map<String, List<CompanyExternalQuota>> _groupQuotasByDate(List<CompanyExternalQuota> quotas) {
+    final Map<String, List<CompanyExternalQuota>> groups = {};
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    for (final quota in quotas) {
+      final quotaDate = DateTime(quota.date.year, quota.date.month, quota.date.day);
+
+      String header;
+      if (quotaDate == today) {
+        header = 'Today';
+      } else if (quotaDate == yesterday) {
+        header = 'Yesterday';
+      } else {
+        header = DateFormat('MMMM dd, yyyy').format(quotaDate);
+      }
+
+      if (!groups.containsKey(header)) {
+        groups[header] = [];
+      }
+      groups[header]!.add(quota);
+    }
+    return groups;
+  }
+
+  void _confirmDetach(pmod.Project project) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Detach Project'),
+        content: Text('Are you sure you want to detach project "${project.name}" (PID: ${project.pid})? It will return to the creator\'s private scope.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              setState(() {
+                _isActioning = true;
+              });
+              try {
+                await ref.read(projectProvider.notifier).detachCompanyFromProject(project.id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Project detached successfully.'), backgroundColor: Colors.green),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Failed to detach project.'), backgroundColor: Colors.red),
+                  );
+                }
+              } finally {
+                if (mounted) {
+                  setState(() {
+                    _isActioning = false;
+                  });
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Detach', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -470,11 +605,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
     switch (index) {
       case 0: return 'Operational Overview';
       case 1: return 'Organizational Records';
-      case 2: return 'Performance Analytics';
-      case 3: return 'Project Hub';
-      case 4: return 'Tasks';
-      case 5: return 'Company Settings';
-      case 6: return 'Configure';
+      case 2: return 'External';
+      case 3: return 'Company Settings';
       default: return '';
     }
   }
@@ -549,11 +681,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
                   children: [
                     _sidebarItem(0, Icons.speed_rounded, 'Overview', isDark),
                     _sidebarItem(1, Icons.archive_outlined, 'Records', isDark),
-                    _sidebarItem(2, Icons.analytics_outlined, 'Analytics', isDark),
-                    _sidebarItem(3, Icons.assignment_outlined, 'Project Hub', isDark),
-                    _sidebarItem(4, Icons.task_alt_outlined, 'Tasks', isDark),
-                    _sidebarItem(5, Icons.settings_outlined, 'Settings', isDark),
-                    _sidebarItem(6, Icons.build_circle_outlined, 'Configure', isDark),
+                    _sidebarItem(2, IconsaxPlusLinear.wallet_money, 'External', isDark),
+                    _sidebarItem(3, Icons.settings_outlined, 'Settings', isDark),
                   ],
                 ),
               ),
@@ -678,176 +807,1000 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
     switch (_selectedTabIndex) {
       case 0: return _buildOverviewTab(company, isDark);
       case 1: return _buildRecordsTab(company, isDark);
-      case 2: return _buildPlaceholderTab('Analytics Dashboard', IconsaxPlusLinear.graph, isDark);
-      case 3: return _buildProjectHubTab(company, isDark);
-      case 4: return const TasksScreen(); // Integrated Tasks Screen
-      case 5: return _buildPlaceholderTab('Company Settings', IconsaxPlusLinear.setting_2, isDark);
-      case 6: return _buildConfigureTab(company, isDark);
+      case 2: return _buildExternalTab(company, isDark);
+      case 3: return _buildSettingsContainer(company, isDark);
       default: return const SizedBox.shrink();
     }
+  }
+
+  Widget _buildSettingsContainer(Company company, bool isDark) {
+    final primaryColor = AppColors.primary;
+    final textColor = isDark ? Colors.white70 : Colors.black87;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // WhatsApp style category tabs
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05))),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildCategoryPill('Configure', 0, primaryColor, textColor, isDark),
+                const SizedBox(width: 8),
+                _buildCategoryPill('General Settings', 1, primaryColor, textColor, isDark),
+                const SizedBox(width: 8),
+                _buildCategoryPill('Security', 2, primaryColor, textColor, isDark),
+              ],
+            ),
+          ),
+        ),
+        // Content
+        Expanded(
+          child: Builder(
+            builder: (context) {
+              switch (_settingsTabIndex) {
+                case 0: return _buildConfigureTab(company, isDark);
+                case 1: return _buildPlaceholderTab('General Settings', IconsaxPlusLinear.setting_2, isDark);
+                case 2: return _buildPlaceholderTab('Security', IconsaxPlusLinear.security_safe, isDark);
+                default: return const SizedBox.shrink();
+              }
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryPill(String title, int index, Color primary, Color textCol, bool isDark) {
+    final isSelected = _settingsTabIndex == index;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _settingsTabIndex = index),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected 
+                ? primary.withValues(alpha: isDark ? 0.2 : 0.1) 
+                : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04)),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected ? primary.withValues(alpha: 0.5) : Colors.transparent,
+            ),
+          ),
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              color: isSelected ? primary : textCol,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExternalTab(Company company, bool isDark) {
+    final quotas = ref.watch(companyExternalQuotaProvider(company.id));
+    final notifier = ref.read(companyExternalQuotaProvider(company.id).notifier);
+    final textColor = isDark ? Colors.white : AppColors.darkText;
+    final hintColor = isDark ? Colors.white38 : Colors.black38;
+
+    // Apply search filter (quotaSearchQuery) and tag filter (quotaTagFilter)
+    final filteredQuotas = quotas.where((quota) {
+      final matchesSearch = quota.title.toLowerCase().contains(_quotaSearchQuery.toLowerCase()) ||
+          quota.qid.toLowerCase().contains(_quotaSearchQuery.toLowerCase()) ||
+          quota.tag.toLowerCase().contains(_quotaSearchQuery.toLowerCase());
+      final matchesTag = _quotaTagFilter.isEmpty || quota.tag.toLowerCase() == _quotaTagFilter.toLowerCase();
+      return matchesSearch && matchesTag;
+    }).toList();
+
+    final groupedQuotas = _groupQuotasByDate(filteredQuotas);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (context) => QuotaManageDialog(
+              onSave: (title, tag) {
+                notifier.addQuota(title: title, tag: tag);
+              },
+            ),
+          );
+        },
+        backgroundColor: AppColors.primary,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Add Quota', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 32,
+          vertical: isMobile ? 16 : 24,
+        ),
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Search Bar & Filter Row
+            Row(
+              children: [
+                // Search Input Field
+                Expanded(
+                  child: Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                    ),
+                    child: TextField(
+                      controller: _quotaSearchController,
+                      style: TextStyle(color: textColor, fontSize: 14),
+                      textAlignVertical: TextAlignVertical.center,
+                      onChanged: (val) {
+                        setState(() {
+                          _quotaSearchQuery = val;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Search quotas (Title, QID, Tag)...',
+                        hintStyle: TextStyle(color: hintColor, fontSize: 13),
+                        prefixIcon: Icon(IconsaxPlusLinear.search_normal, size: 18, color: hintColor),
+                        suffixIcon: _quotaSearchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16),
+                                color: hintColor,
+                                onPressed: () {
+                                  _quotaSearchController.clear();
+                                  setState(() {
+                                    _quotaSearchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Tag Filter Popup Button
+                PopupMenuButton<String>(
+                  tooltip: 'Filter by Tag',
+                  onSelected: (tag) {
+                    setState(() {
+                      if (_quotaTagFilter == tag) {
+                        _quotaTagFilter = '';
+                      } else {
+                        _quotaTagFilter = tag;
+                      }
+                    });
+                  },
+                  itemBuilder: (context) {
+                    final uniqueTags = quotas.map((q) => q.tag).toSet().toList();
+                    if (!uniqueTags.contains('General')) uniqueTags.add('General');
+                    if (!uniqueTags.contains('Marketing')) uniqueTags.add('Marketing');
+                    if (!uniqueTags.contains('Development')) uniqueTags.add('Development');
+                    if (!uniqueTags.contains('Operations')) uniqueTags.add('Operations');
+                    
+                    return [
+                      // Clear Filter option
+                      PopupMenuItem<String>(
+                        value: '',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.filter_alt_off_outlined,
+                              size: 16,
+                              color: isDark ? Colors.white70 : Colors.black54,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('All Tags', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      ...uniqueTags.map((tag) {
+                        final isSelected = _quotaTagFilter.toLowerCase() == tag.toLowerCase();
+                        return CheckedPopupMenuItem<String>(
+                          value: tag,
+                          checked: isSelected,
+                          child: Text(
+                            tag,
+                            style: TextStyle(
+                              color: isDark ? Colors.white.withOpacity(0.9) : Colors.black.withOpacity(0.9),
+                              fontSize: 13,
+                            ),
+                          ),
+                        );
+                      }),
+                    ];
+                  },
+                  child: Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: _quotaTagFilter.isNotEmpty
+                          ? AppColors.primary.withOpacity(0.15)
+                          : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02)),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _quotaTagFilter.isNotEmpty
+                            ? AppColors.primary
+                            : (isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                      ),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(
+                          IconsaxPlusLinear.filter,
+                          size: 18,
+                          color: _quotaTagFilter.isNotEmpty ? AppColors.primary : textColor,
+                        ),
+                        if (_quotaTagFilter.isNotEmpty)
+                          Positioned(
+                            top: 10,
+                            right: 10,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            if (quotas.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 80),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(IconsaxPlusLinear.wallet_search, size: 64, color: hintColor),
+                      const SizedBox(height: 16),
+                      Text('No quotas added yet', style: TextStyle(color: hintColor, fontSize: 16, fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 8),
+                      Text('Click "Add Quota" to create your first entry', style: TextStyle(color: hintColor.withValues(alpha: 0.8), fontSize: 12)),
+                    ],
+                  ),
+                ),
+              )
+            else if (filteredQuotas.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 80),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(IconsaxPlusLinear.search_status, size: 64, color: hintColor),
+                      const SizedBox(height: 16),
+                      Text('No matching quotas found', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Text('Try adjusting your search query or tag filter', style: TextStyle(color: hintColor, fontSize: 13)),
+                      const SizedBox(height: 16),
+                      TextButton.icon(
+                        onPressed: () {
+                          _quotaSearchController.clear();
+                          setState(() {
+                            _quotaSearchQuery = '';
+                            _quotaTagFilter = '';
+                          });
+                        },
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Reset Search & Filters'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: groupedQuotas.keys.length,
+                itemBuilder: (context, index) {
+                  final dateHeader = groupedQuotas.keys.elementAt(index);
+                  final quotasInDate = groupedQuotas[dateHeader]!;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Date Group Header
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16, bottom: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                dateHeader,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white54 : Colors.black54,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Divider(
+                                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                                height: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Quotas under this Date
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: quotasInDate.length,
+                        itemBuilder: (context, idx) {
+                          final quota = quotasInDate[idx];
+                          final formattedTime = DateFormat('hh:mm a').format(quota.date);
+                          final hasEarn = quota.earn > 0;
+                          final hasExpense = quota.expense > 0;
+
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF111827) : Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05)),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    left: BorderSide(
+                                      color: hasEarn 
+                                          ? AppColors.success 
+                                          : (hasExpense ? AppColors.error : AppColors.primary),
+                                      width: 4,
+                                    ),
+                                  ),
+                                ),
+                                child: InkWell(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => QuotaEditScreen(quota: quota),
+                                      ),
+                                    );
+                                  },
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: isMobile ? 12 : 20,
+                                      vertical: 14,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        // Main info
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      quota.title,
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: textColor,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                    decoration: BoxDecoration(
+                                                      color: AppColors.primary.withValues(alpha: 0.08),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.15), width: 0.5),
+                                                    ),
+                                                    child: Text(
+                                                      quota.tag,
+                                                      style: const TextStyle(
+                                                        fontSize: 9,
+                                                        fontWeight: FontWeight.w800,
+                                                        color: AppColors.primary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Row(
+                                                children: [
+                                                  Text(
+                                                    quota.qid,
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.w800,
+                                                      color: isDark ? AppColors.primaryContainer : AppColors.primary,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    '•  $formattedTime',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: hintColor,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              if (hasEarn || hasExpense) ...[
+                                                const SizedBox(height: 10),
+                                                Wrap(
+                                                  spacing: 12,
+                                                  runSpacing: 6,
+                                                  children: [
+                                                    if (hasEarn)
+                                                      Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Container(
+                                                            padding: const EdgeInsets.all(3),
+                                                            decoration: BoxDecoration(
+                                                              color: AppColors.success.withValues(alpha: 0.1),
+                                                              shape: BoxShape.circle,
+                                                            ),
+                                                            child: const Icon(Icons.arrow_downward_rounded, color: AppColors.success, size: 8),
+                                                          ),
+                                                          const SizedBox(width: 6),
+                                                          Text(
+                                                            'Earn: \$${quota.earn.toStringAsFixed(2)}',
+                                                            style: const TextStyle(
+                                                              fontSize: 11,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: AppColors.success,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    if (hasExpense)
+                                                      Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Container(
+                                                            padding: const EdgeInsets.all(3),
+                                                            decoration: BoxDecoration(
+                                                              color: AppColors.error.withValues(alpha: 0.1),
+                                                              shape: BoxShape.circle,
+                                                            ),
+                                                            child: const Icon(Icons.arrow_upward_rounded, color: AppColors.error, size: 8),
+                                                          ),
+                                                          const SizedBox(width: 6),
+                                                          Text(
+                                                            'Expense: \$${quota.expense.toStringAsFixed(2)}',
+                                                            style: const TextStyle(
+                                                              fontSize: 11,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: AppColors.error,
+                                                            ),
+                                                          ),
+                                                          if (quota.expenseTime.isNotEmpty) ...[
+                                                            const SizedBox(width: 4),
+                                                            Text(
+                                                              '(${quota.expenseTime})',
+                                                              style: TextStyle(fontSize: 9, color: hintColor),
+                                                            ),
+                                                          ],
+                                                        ],
+                                                      ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        // Edit icon at the right
+                                        IconButton(
+                                          icon: Icon(Icons.edit_note_rounded, size: 18, color: hintColor),
+                                          style: IconButton.styleFrom(
+                                            padding: EdgeInsets.zero,
+                                            minimumSize: const Size(32, 32),
+                                          ),
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => QuotaEditScreen(quota: quota),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildConfigureTab(Company company, bool isDark) {
     final textColor = isDark ? Colors.white : AppColors.darkText;
     final subTextColor = isDark ? Colors.white70 : Colors.black54;
+    final hintColor = isDark ? Colors.white38 : Colors.black38;
+    final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          GlassContainer(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    // Get projects of the current company
+    final projectState = ref.watch(projectProvider);
+    final allCompanyProjects = projectState.maybeWhen(
+      data: (list) => list.where((p) => p.companyId == company.id).toList(),
+      orElse: () => <pmod.Project>[],
+    );
+
+    // Apply search filter (attachedSearchQuery) and status filter (selectedStatuses)
+    final filteredProjects = allCompanyProjects.where((p) {
+      final matchesSearch = p.name.toLowerCase().contains(_attachedSearchQuery.toLowerCase()) ||
+          p.pid.toLowerCase().contains(_attachedSearchQuery.toLowerCase());
+      final matchesStatus = _selectedStatuses.isEmpty || _selectedStatuses.contains(p.status);
+      return matchesSearch && matchesStatus;
+    }).toList();
+
+    // Sort by updated time descending (or created time/start date)
+    filteredProjects.sort((a, b) {
+      final dateA = a.updatedAt ?? a.createdAt ?? a.startDate;
+      final dateB = b.updatedAt ?? b.createdAt ?? b.startDate;
+      return dateB.compareTo(dateA);
+    });
+
+    // Group by Date (Today, Yesterday, Date format)
+    final groupedProjects = _groupProjectsByDate(filteredProjects);
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 32,
+          vertical: isMobile ? 16 : 24,
+        ),
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Search Bar & Filter & Attach Row
+            Row(
               children: [
-                Text('Project Attachment Configuration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
-                const SizedBox(height: 8),
-                Text('Search for a project by its PID to attach or detach it from this organization.', style: TextStyle(fontSize: 12, color: subTextColor)),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
-                        ),
-                        child: TextField(
-                          controller: _pidController,
-                          style: TextStyle(color: textColor, fontSize: 14),
-                          textAlignVertical: TextAlignVertical.center,
-                          decoration: InputDecoration(
-                            hintText: 'Enter Project PID (e.g. PRJ-XXX-XXXX)',
-                            hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 13),
-                            prefixIcon: Icon(IconsaxPlusLinear.search_normal, size: 18, color: isDark ? Colors.white38 : Colors.black38),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          ),
-                          onSubmitted: (_) => _searchProject(),
-                        ),
+                // Search Input Field
+                Expanded(
+                  child: Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                    ),
+                    child: TextField(
+                      controller: _attachedSearchController,
+                      style: TextStyle(color: textColor, fontSize: 14),
+                      textAlignVertical: TextAlignVertical.center,
+                      onChanged: (val) {
+                        setState(() {
+                          _attachedSearchQuery = val;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Search attached projects...',
+                        hintStyle: TextStyle(color: hintColor, fontSize: 13),
+                        prefixIcon: Icon(IconsaxPlusLinear.search_normal, size: 18, color: hintColor),
+                        suffixIcon: _attachedSearchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16),
+                                color: hintColor,
+                                onPressed: () {
+                                  _attachedSearchController.clear();
+                                  setState(() {
+                                    _attachedSearchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: _isSearching ? null : _searchProject,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Status Filter Icon Button (PopupMenuButton)
+                PopupMenuButton<pmod.ProjectStatus>(
+                  tooltip: 'Filter by Status',
+                  onSelected: (status) {
+                    setState(() {
+                      if (_selectedStatuses.contains(status)) {
+                        _selectedStatuses.remove(status);
+                      } else {
+                        _selectedStatuses.add(status);
+                      }
+                    });
+                  },
+                  itemBuilder: (context) {
+                    return pmod.ProjectStatus.values.map((status) {
+                      final isSelected = _selectedStatuses.contains(status);
+                      return CheckedPopupMenuItem<pmod.ProjectStatus>(
+                        value: status,
+                        checked: isSelected,
+                        child: Text(
+                          _getStatusName(status),
+                          style: TextStyle(
+                            color: isDark ? Colors.white.withOpacity(0.9) : Colors.black.withOpacity(0.9),
+                            fontSize: 13,
+                          ),
                         ),
-                        child: _isSearching 
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : const Text('Search', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      );
+                    }).toList();
+                  },
+                  child: Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: _selectedStatuses.isNotEmpty
+                          ? AppColors.primary.withOpacity(0.15)
+                          : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02)),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _selectedStatuses.isNotEmpty
+                            ? AppColors.primary
+                            : (isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
                       ),
-                    )
-                  ],
+                    ),
+                    child: Icon(
+                      IconsaxPlusLinear.filter,
+                      size: 18,
+                      color: _selectedStatuses.isNotEmpty ? AppColors.primary : textColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Attach Icon Button (Opens Dialog)
+                SizedBox(
+                  height: 48,
+                  width: isMobile ? 48 : null,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AttachProjectDialog(company: company),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                      padding: isMobile ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                    child: isMobile
+                        ? const Icon(IconsaxPlusLinear.link_1, size: 18)
+                        : const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(IconsaxPlusLinear.link_1, size: 18),
+                              SizedBox(width: 8),
+                              Text(
+                                'Attach Project',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                  ),
                 ),
               ],
             ),
-          ),
-          if (_searchedProject != null) ...[
             const SizedBox(height: 24),
-            _buildProjectResultCard(company, isDark, textColor, subTextColor),
-          ]
-        ],
-      ).animate().fadeIn().slideY(begin: 0.05),
-    );
-  }
 
-  Widget _buildProjectResultCard(Company company, bool isDark, Color textColor, Color subTextColor) {
-    final project = _searchedProject!;
-    final bool isAttachedToCurrent = project.companyId == company.id;
-    final bool isAttachedToOther = project.companyId != null && project.companyId != company.id;
+            // Date Grouped Project Cards or Empty State
+            if (filteredProjects.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 80),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(IconsaxPlusLinear.link_square, size: 64, color: hintColor),
+                      const SizedBox(height: 16),
+                      Text(
+                        allCompanyProjects.isEmpty
+                            ? 'No projects attached to this organization'
+                            : 'No search results match filters',
+                        style: TextStyle(color: hintColor, fontSize: 15, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        allCompanyProjects.isEmpty
+                            ? 'Click "Attach Project" to link a project'
+                            : 'Try adjusting your search query or filters',
+                        style: TextStyle(color: hintColor.withOpacity(0.8), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: groupedProjects.keys.length,
+                itemBuilder: (context, index) {
+                  final dateHeader = groupedProjects.keys.elementAt(index);
+                  final projectsInDate = groupedProjects[dateHeader]!;
 
-    Color approvalColor = project.isApproved ? AppColors.success : AppColors.warning;
-    String approvalText = project.isApproved ? 'LIVE' : 'PENDING';
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Date Group Header (WhatsApp message group style or Gallery style)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16, bottom: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                dateHeader,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white54 : Colors.black54,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Divider(
+                                color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
-    return GlassContainer(
-      padding: const EdgeInsets.all(24),
-      border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 1),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(project.pid, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                      // List of projects on this date
+                      ...projectsInDate.map((proj) {
+                        final formattedTime = DateFormat('hh:mm a').format(
+                          proj.updatedAt ?? proj.createdAt ?? proj.startDate,
+                        );
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.02),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () {
+                              context.go('/projects/${proj.id}');
+                            },
+                            child: Padding(
+                              padding: EdgeInsets.all(isMobile ? 12 : 16),
+                              child: Row(
+                                children: [
+                                  // Left side brand color indicator bar
+                                  Container(
+                                    width: 4,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: proj.brandColor,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                  SizedBox(width: isMobile ? 12 : 16),
+
+                                  // Center Section: Info
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 6,
+                                          crossAxisAlignment: WrapCrossAlignment.center,
+                                          children: [
+                                            // PID Badge
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primary.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                proj.pid,
+                                                style: const TextStyle(
+                                                  color: AppColors.primary,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 9,
+                                                ),
+                                              ),
+                                            ),
+
+                                            // Status Badge
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: _getStatusColor(proj.status).withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                _getStatusName(proj.status).toUpperCase(),
+                                                style: TextStyle(
+                                                  color: _getStatusColor(proj.status),
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 8,
+                                                  letterSpacing: 0.3,
+                                                ),
+                                              ),
+                                            ),
+
+                                            // Live/Pending badge based on approval
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: (proj.isApproved ? AppColors.success : AppColors.warning).withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                proj.isApproved ? 'LIVE' : 'PENDING',
+                                                style: TextStyle(
+                                                  color: proj.isApproved ? AppColors.success : AppColors.warning,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 8,
+                                                  letterSpacing: 0.3,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          proj.name,
+                                          style: TextStyle(
+                                            fontSize: isMobile ? 14 : 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: textColor,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (proj.description.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            proj.description,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: subTextColor,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(width: isMobile ? 12 : 16),
+
+                                  // Right Section: Action (Detach) and Time
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      // Detach button
+                                      Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(8),
+                                          onTap: () => _confirmDetach(proj),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(6),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.error.withOpacity(0.08),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: const Icon(
+                                              IconsaxPlusLinear.link_square,
+                                              size: 15,
+                                              color: AppColors.error,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+
+                                      // Time of attachment (WhatsApp message time style)
+                                      Text(
+                                        formattedTime,
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          color: hintColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ).animate().fadeIn(duration: 250.ms).slideY(begin: 0.05, end: 0);
+                      }).toList(),
+                    ],
+                  );
+                },
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: approvalColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: approvalColor.withOpacity(0.5)),
-                ),
-                child: Text(approvalText, style: TextStyle(color: approvalColor, fontWeight: FontWeight.bold, fontSize: 10)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(project.name, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(IconsaxPlusLinear.status, size: 14, color: subTextColor),
-              const SizedBox(width: 6),
-              Text(
-                isAttachedToCurrent 
-                  ? 'Currently linked to ${company.name}'
-                  : isAttachedToOther 
-                    ? 'Linked to another organization'
-                    : 'Unlinked (Private)',
-                style: TextStyle(color: subTextColor, fontSize: 12),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          if (isAttachedToCurrent)
-            SizedBox(
-              width: 400,
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _isActioning ? null : _detachProject,
-                icon: _isActioning 
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Icon(IconsaxPlusLinear.link_square, color: Colors.white, size: 18),
-                label: const Text('DETACH PROJECT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.error,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            )
-          else
-            SizedBox(
-              width: 400,
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _isActioning ? null : () => _attachProject(company),
-                icon: _isActioning 
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Icon(IconsaxPlusLinear.link_1, color: Colors.white, size: 18),
-                label: Text('ATTACH TO ${company.name.toUpperCase()}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            )
-        ],
+          ],
+        ),
       ),
-    ).animate().fadeIn(duration: 400.ms).scaleXY(begin: 0.95);
+    );
   }
 
   Widget _buildOverviewTab(Company company, bool isDark) {

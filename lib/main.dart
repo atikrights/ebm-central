@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -15,6 +16,19 @@ import 'dart:io' if (dart.library.html) 'package:frontend/core/utils/io_stub.dar
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = false;
+  
+  // Enable immersive edge-to-edge system UI styling
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.dark,
+      systemNavigationBarDividerColor: Colors.transparent,
+    ),
+  );
   
   // Initialize dynamic environment and base URL configs
   await AppConfig.init();
@@ -61,7 +75,25 @@ class EbficbmApp extends ConsumerWidget {
           return const PremiumLoadingScreen();
         }
         return ResponsiveBreakpoints.builder(
-          child: child!,
+          child: Builder(
+            builder: (context) {
+              final bp = ResponsiveBreakpoints.of(context);
+              
+              if (bp.isMobile) {
+                return ResponsiveScaledBox(
+                  width: 450,
+                  child: child!,
+                );
+              } else if (bp.isTablet) {
+                return ResponsiveScaledBox(
+                  width: 800,
+                  child: child!,
+                );
+              }
+              
+              return child!;
+            },
+          ),
           breakpoints: [
             const Breakpoint(start: 0, end: 450, name: MOBILE),
             const Breakpoint(start: 451, end: 800, name: TABLET),

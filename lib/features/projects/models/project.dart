@@ -30,6 +30,8 @@ class Project {
   final String coverPhotoUrl;
   final String inspirationText;
   final DateTime? deletedAt;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   Project({
     required this.id,
@@ -58,6 +60,8 @@ class Project {
     this.coverPhotoUrl = '',
     this.inspirationText = '',
     this.deletedAt,
+    this.createdAt,
+    this.updatedAt,
   });
 
   factory Project.fromMap(Map<String, dynamic> map) {
@@ -92,6 +96,10 @@ class Project {
       inspirationText: map['inspiration_text'] ?? map['inspirationText'] ?? '',
       deletedAt: (map['deleted_at'] ?? map['deletedAt']) != null 
           ? DateTime.parse(map['deleted_at'] ?? map['deletedAt']) : null,
+      createdAt: (map['created_at'] ?? map['createdAt']) != null
+          ? DateTime.parse(map['created_at'] ?? map['createdAt']) : null,
+      updatedAt: (map['updated_at'] ?? map['updatedAt']) != null
+          ? DateTime.parse(map['updated_at'] ?? map['updatedAt']) : null,
     );
   }
 
