@@ -376,41 +376,47 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       key: _scaffoldKey,
       backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
       drawer: !isDesktop ? _buildSidebar(company, isDark, true) : null,
-      body: Column(
-        children: [
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (isDesktop) _buildSidebar(company, isDark, false),
-                Expanded(
-                  child: Stack(
-                    children: [
-                      // Content Area
-                      Positioned.fill(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: kHeaderHeight),
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 400),
-                            child: _buildContent(company, isDark),
+      body: SafeArea(
+        top: !isDesktop,
+        bottom: !isDesktop,
+        left: !isDesktop,
+        right: !isDesktop,
+        child: Column(
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isDesktop) _buildSidebar(company, isDark, false),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        // Content Area
+                        Positioned.fill(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: kHeaderHeight),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 400),
+                              child: _buildContent(company, isDark),
+                            ),
                           ),
                         ),
-                      ),
-                      
-                      // Header (Absolute Top Overlay)
-                      Positioned(
-                        top: 0, 
-                        left: 0, 
-                        right: 0,
-                        child: _buildHeader(company, isDark, !isDesktop),
-                      ),
-                    ],
+                        
+                        // Header (Absolute Top Overlay)
+                        Positioned(
+                          top: 0, 
+                          left: 0, 
+                          right: 0,
+                          child: _buildHeader(company, isDark, !isDesktop),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1812,20 +1818,35 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
   }
 
   Widget _buildOverviewTab(Company company, bool isDark) {
+    final w = MediaQuery.of(context).size.width;
+    final isMobile = w < 600;
+    final paddingVal = isMobile ? 16.0 : 32.0;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+      padding: EdgeInsets.all(paddingVal),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _buildStatCard('Active Employees', company.activeEmployees.toString(), IconsaxPlusLinear.people, Colors.blue, isDark),
-              const SizedBox(width: 20),
-              _buildStatCard('Annual Revenue', '\$${(company.annualRevenue / 1000000).toStringAsFixed(1)}M', IconsaxPlusLinear.money_send, Colors.green, isDark),
-              const SizedBox(width: 20),
-              _buildStatCard('Health Score', '${(company.healthScore * 100).toInt()}%', IconsaxPlusLinear.heart, Colors.red, isDark),
-            ],
-          ),
+          if (isMobile)
+            Column(
+              children: [
+                _buildStatCard('Active Employees', company.activeEmployees.toString(), IconsaxPlusLinear.people, Colors.blue, isDark, isMobile: true),
+                const SizedBox(height: 16),
+                _buildStatCard('Annual Revenue', '\$${(company.annualRevenue / 1000000).toStringAsFixed(1)}M', IconsaxPlusLinear.money_send, Colors.green, isDark, isMobile: true),
+                const SizedBox(height: 16),
+                _buildStatCard('Health Score', '${(company.healthScore * 100).toInt()}%', IconsaxPlusLinear.heart, Colors.red, isDark, isMobile: true),
+              ],
+            )
+          else
+            Row(
+              children: [
+                _buildStatCard('Active Employees', company.activeEmployees.toString(), IconsaxPlusLinear.people, Colors.blue, isDark, isMobile: false),
+                const SizedBox(width: 20),
+                _buildStatCard('Annual Revenue', '\$${(company.annualRevenue / 1000000).toStringAsFixed(1)}M', IconsaxPlusLinear.money_send, Colors.green, isDark, isMobile: false),
+                const SizedBox(width: 20),
+                _buildStatCard('Health Score', '${(company.healthScore * 100).toInt()}%', IconsaxPlusLinear.heart, Colors.red, isDark, isMobile: false),
+              ],
+            ),
           const SizedBox(height: 32),
           _buildInfoSection(company, isDark),
         ],
@@ -1833,54 +1854,61 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color, bool isDark) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 20),
+  Widget _buildStatCard(String label, String value, IconData icon, Color color, bool isDark, {bool isMobile = false}) {
+    final cardContent = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(height: 20),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
-                fontWeight: FontWeight.w500,
-              ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+              fontWeight: FontWeight.w500,
             ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : Colors.black87,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+
+    if (isMobile) {
+      return cardContent;
+    }
+    return Expanded(child: cardContent);
   }
 
   Widget _buildInfoSection(Company company, bool isDark) {
+    final w = MediaQuery.of(context).size.width;
+    final isMobile = w < 600;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(32),
+      padding: EdgeInsets.all(isMobile ? 20 : 32),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -1898,17 +1926,45 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
             ),
           ),
           const SizedBox(height: 24),
-          _buildInfoRow('Primary Category', company.categories.join(', '), isDark),
-          _buildInfoRow('Official Website', company.website, isDark),
-          _buildInfoRow('Corporate Email', company.primaryEmail, isDark),
-          _buildInfoRow('Direct Phone', company.phone, isDark),
-          _buildInfoRow('Global Location', company.location, isDark),
+          _buildInfoRow('Primary Category', company.categories.join(', '), isDark, isMobile),
+          _buildInfoRow('Official Website', company.website, isDark, isMobile),
+          _buildInfoRow('Corporate Email', company.primaryEmail, isDark, isMobile),
+          _buildInfoRow('Direct Phone', company.phone, isDark, isMobile),
+          _buildInfoRow('Global Location', company.location, isDark, isMobile),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value, bool isDark) {
+  Widget _buildInfoRow(String label, String value, bool isDark, bool isMobile) {
+    if (isMobile) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(

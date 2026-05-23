@@ -79,41 +79,47 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
           key: _scaffoldKey,
           backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
           drawer: !isDesktop ? _buildSidebar(project, isDark, true) : null,
-          body: Column(
-            children: [
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (isDesktop) _buildSidebar(project, isDark, false),
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          // Content Area
-                          Positioned.fill(
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: kHeaderHeight),
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 400),
-                                child: _buildContent(project, isDark),
+          body: SafeArea(
+            top: !isDesktop,
+            bottom: !isDesktop,
+            left: !isDesktop,
+            right: !isDesktop,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isDesktop) _buildSidebar(project, isDark, false),
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            // Content Area
+                            Positioned.fill(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: kHeaderHeight),
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 400),
+                                  child: _buildContent(project, isDark),
+                                ),
                               ),
                             ),
-                          ),
-                          
-                          // Header
-                          Positioned(
-                            top: 0, 
-                            left: 0, 
-                            right: 0,
-                            child: _buildHeader(project, isDark, !isDesktop),
-                          ),
-                        ],
+                            
+                            // Header
+                            Positioned(
+                              top: 0, 
+                              left: 0, 
+                              right: 0,
+                              child: _buildHeader(project, isDark, !isDesktop),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

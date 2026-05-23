@@ -115,38 +115,44 @@ class _TaskWorkspaceScreenState extends ConsumerState<TaskWorkspaceScreen> {
               child: _buildSidebar(task, isDark, isDrawer: true),
             )
           : null,
-      body: Column(
-        children: [
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (isDesktop) _buildSidebar(task, isDark, isDrawer: false),
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: _kHeaderH),
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 350),
-                            transitionBuilder: (child, anim) =>
-                                FadeTransition(opacity: anim, child: child),
-                            child: _buildTabContent(task, isDark),
+      body: SafeArea(
+        top: !isDesktop,
+        bottom: !isDesktop,
+        left: !isDesktop,
+        right: !isDesktop,
+        child: Column(
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isDesktop) _buildSidebar(task, isDark, isDrawer: false),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: _kHeaderH),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 350),
+                              transitionBuilder: (child, anim) =>
+                                  FadeTransition(opacity: anim, child: child),
+                              child: _buildTabContent(task, isDark),
+                            ),
                           ),
                         ),
-                      ),
-                      Positioned(
-                        top: 0, left: 0, right: 0,
-                        child: _buildHeader(task, isDark, !isDesktop),
-                      ),
-                    ],
+                        Positioned(
+                          top: 0, left: 0, right: 0,
+                          child: _buildHeader(task, isDark, !isDesktop),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
