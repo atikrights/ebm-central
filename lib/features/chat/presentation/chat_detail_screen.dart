@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../data/chat_service.dart';
 import '../data/websocket_service.dart';
+import '../data/unread_chat_count_provider.dart';
 import '../../../core/auth/auth_provider.dart';
 import 'chat_profile_view_screen.dart';
 
@@ -151,13 +152,53 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
       if (!ws.isSupported) {
         _pollTimer?.cancel();
-        _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
           if (mounted) {
-            _loadMessages(isSilent: true);
+            _performDeltaSync();
           }
         });
       }
     }
+  }
+
+  Future<void> _performDeltaSync() async {
+    // If the active chat is AI or Self Notes, delta sync is handled via dedicated AI reply/local sync flows
+    if (widget.receiverType == 'ai' || widget.receiverType == 'self') return;
+
+    int maxId = 0;
+    for (var m in _currentMessages) {
+      int id = int.tryParse(m['id'].toString()) ?? 0;
+      if (id > maxId) maxId = id;
+    }
+
+    try {
+      final chatService = ref.read(chatServiceProvider);
+      final newMessages = await chatService.getDeltaSync(maxId);
+      
+      if (newMessages.isNotEmpty && mounted) {
+        final authState = ref.read(authProvider);
+        final String myId = authState.userId?.toString() ?? '';
+
+        setState(() {
+          for (var msg in newMessages) {
+            final String msgId = msg['id'].toString();
+            final String senderIdStr = msg['sender_id']?.toString() ?? '';
+            final String receiverIdStr = msg['receiver_id']?.toString() ?? '';
+            
+            // Only add messages that belong to this specific active direct message conversation
+            final bool isP2PMatch = (receiverIdStr == myId && senderIdStr == widget.receiverType) ||
+                                    (senderIdStr == myId && receiverIdStr == widget.receiverType);
+
+            if (isP2PMatch) {
+              if (!_currentMessages.any((m) => m['id'].toString() == msgId)) {
+                _currentMessages.add(msg);
+              }
+            }
+          }
+        });
+        _scrollToBottom();
+      }
+    } catch (_) {}
   }
 
   void _handleWsEvent(PusherEvent event) {
@@ -179,7 +220,10 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     }
   }
 
-  void _onDataUpdated(Map<String, dynamic> data) {
+  void _onDataUpdated(Map<String, dynamic> rawPayload) {
+    final Map<String, dynamic> data = (rawPayload['data'] is Map)
+        ? Map<String, dynamic>.from(rawPayload['data'])
+        : rawPayload;
     final action = data['action'];
     final msgId = data['id'];
     
@@ -230,6 +274,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       
       if (!isMe && int.tryParse(widget.receiverType) != null) {
         ref.read(chatServiceProvider).markAsRead(int.parse(widget.receiverType));
+        ref.read(unreadChatCountProvider.notifier).refreshCount();
       }
     }
   }
@@ -237,7 +282,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   void _onStatusUpdate(Map<String, dynamic> data) {
     setState(() {
       for (var msg in _currentMessages) {
-        if (msg['id'].toString() == data['message_id'].toString()) {
+        if (msg['id'].toString() == data['id'].toString()) {
           msg['status'] = data['status'];
         }
       }
@@ -249,6 +294,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     try {
       final service = ref.read(chatServiceProvider);
       final messages = await service.getChats(widget.receiverType);
+      
+      if (int.tryParse(widget.receiverType) != null) {
+        await service.markAsRead(int.parse(widget.receiverType));
+        ref.read(unreadChatCountProvider.notifier).refreshCount();
+      }
       
       if (mounted) {
         setState(() {
@@ -1322,7 +1372,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       case 'sending':
         return const Icon(Icons.access_time, size: 10, color: Colors.white70);
       case 'read':
-        return const Icon(Icons.done_all, size: 14, color: Colors.cyanAccent);
+        return const Icon(Icons.done_all, size: 14, color: Color(0xFF34B7F1));
       case 'delivered':
         return const Icon(Icons.done_all, size: 14, color: Colors.white70);
       case 'sent':

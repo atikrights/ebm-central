@@ -43,6 +43,11 @@ class ProfileScreen extends StatelessWidget {
             _buildSectionHeader(theme, 'SYSTEM'),
             _buildProfileItem(Icons.notifications_none, 'Notifications'),
             _buildProfileItem(Icons.language, 'Language'),
+            _buildProfileItem(
+              Icons.refresh_rounded, 
+              'System Update',
+              onTap: () => Navigator.pushNamed(context, '/update'),
+            ),
             const SizedBox(height: 32),
             _buildProfileItem(Icons.logout, 'Terminate Session', color: Colors.redAccent),
           ],

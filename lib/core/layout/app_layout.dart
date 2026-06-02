@@ -45,7 +45,11 @@ import '../../features/mail/presentation/mail_automation_screen.dart';
 import '../../features/workplace/presentation/company_screen.dart';
 import '../../features/chat/presentation/chat_dashboard_screen.dart';
 import '../../features/governance/presentation/authority_matrix_screen.dart';
+import '../../features/security/presentation/chat_governance_screen.dart';
+import '../../features/settings/presentation/update_screen.dart';
+import '../../features/notices/presentation/notice_screen.dart';
 import 'dart:async';
+import '../../features/chat/data/unread_chat_count_provider.dart';
 
 
 // Global header height constant
@@ -178,6 +182,9 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     ChatSettingsScreen(), // Index 44: Chat Settings
     ChatDashboardScreen(), // Index 45: Chat Dashboard
     const AuthorityMatrixScreen(), // Index 46: User Role & Permissions
+    const UpdateScreen(), // Index 47: System Update
+    const ChatGovernanceScreen(), // Index 48: Chat Monitoring & Governance
+    const NoticeScreen(), // Index 49: Notices
   ];
 
   static const Map<int, String> _indexToPath = {
@@ -196,6 +203,9 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     42: '/teams-control',
     43: '/icons',
     46: '/user-role',
+    47: '/update',
+    48: '/chat-governance',
+    49: '/notices',
   };
 
   void _onNavTap(int index) {
@@ -587,6 +597,7 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
   }
 
   Widget _buildSidebar(bool isDark, {required bool isExpanded, bool isDrawer = false}) {
+    final unreadCount = ref.watch(unreadChatCountProvider);
     final width = isDrawer ? double.infinity : (isExpanded ? 240.0 : 80.0);
     final bgColor = isDark
         ? const Color(0xFF0F1117).withOpacity(0.85)
@@ -711,10 +722,11 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                     isExpanded: isExpanded,
                     isDark: isDark,
                     subItems: [
-                      _SubMenuItem(index: 5, label: 'All Chat', icon: Icons.forum_rounded),
+                      _SubMenuItem(index: 5, label: 'All Chat', icon: Icons.forum_rounded, badgeCount: unreadCount),
                       _SubMenuItem(index: 44, label: 'Settings', icon: Icons.settings_applications_rounded),
                     ],
                   ),
+                  _sidebarItem(49, IconsaxPlusLinear.notification_status, 'Notices', isExpanded, isDark),
                   _buildExpandableSidebarItem(
                     index: 30,
                     icon: Icons.mail_outline_rounded,
@@ -774,6 +786,8 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                         _SubMenuItem(index: 46, label: 'User Role', icon: Icons.admin_panel_settings_rounded),
                         _SubMenuItem(index: 41, label: 'Teams', icon: Icons.group_work_rounded),
                         _SubMenuItem(index: 42, label: 'Teams Control', icon: Icons.shield_rounded),
+                        if (ref.watch(authProvider).isSuperAdmin)
+                          _SubMenuItem(index: 48, label: 'Chat Audit', icon: Icons.remove_red_eye_rounded),
                       ],
                     ),
                   
@@ -786,6 +800,7 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                     isDark: isDark,
                     subItems: [
                       _SubMenuItem(index: 6, label: 'Account Profile', icon: Icons.person_outline),
+                      _SubMenuItem(index: 47, label: 'System Update', icon: Icons.refresh_rounded),
                     ],
                   ),
 
@@ -813,6 +828,8 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     final isOpen = _expandedMenus.contains(label);
     final primaryColor = Theme.of(context).colorScheme.primary;
     final unselectedColor = isDark ? Colors.white54 : Colors.black54;
+
+    final totalBadges = subItems.fold<int>(0, (sum, item) => sum + item.badgeCount);
 
     return Column(
       children: [
@@ -850,7 +867,25 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                       boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.5), blurRadius: 4)],
                     ),
                   ),
-                Icon(icon, color: isSelected ? primaryColor : unselectedColor, size: 22), // Refined icon size
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(icon, color: isSelected ? primaryColor : unselectedColor, size: 22),
+                    if (totalBadges > 0 && !isExpanded)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEF4444),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
                 if (isExpanded) ...[
                   const SizedBox(width: 14),
                   Expanded(
@@ -864,6 +899,23 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                       ),
                     ),
                   ),
+                  if (totalBadges > 0) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(color: const Color(0xFFEF4444).withOpacity(0.3), blurRadius: 4, spreadRadius: 1),
+                        ],
+                      ),
+                      child: Text(
+                        totalBadges.toString(),
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Icon(
                     isOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                     size: 16, // Smaller arrow
@@ -932,14 +984,33 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                               children: [
                                 Icon(sub.icon, size: 16, color: isSubSelected ? primaryColor : unselectedColor.withOpacity(0.7)),
                                 const SizedBox(width: 10),
-                                Text(
-                                  sub.label,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isSubSelected ? (isDark ? Colors.white : Colors.black) : unselectedColor.withOpacity(0.8),
-                                    fontWeight: isSubSelected ? FontWeight.w600 : FontWeight.w500,
+                                Expanded(
+                                  child: Text(
+                                    sub.label,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isSubSelected ? (isDark ? Colors.white : Colors.black) : unselectedColor.withOpacity(0.8),
+                                      fontWeight: isSubSelected ? FontWeight.w600 : FontWeight.w500,
+                                    ),
                                   ),
                                 ),
+                                if (sub.badgeCount > 0) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEF4444),
+                                      borderRadius: BorderRadius.circular(10),
+                                      boxShadow: [
+                                        BoxShadow(color: const Color(0xFFEF4444).withOpacity(0.3), blurRadius: 4, spreadRadius: 1),
+                                      ],
+                                    ),
+                                    child: Text(
+                                      sub.badgeCount.toString(),
+                                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
                               ],
                             ),
                           ),
@@ -1358,7 +1429,8 @@ class _SubMenuItem {
   final int index;
   final String label;
   final IconData icon;
-  _SubMenuItem({required this.index, required this.label, required this.icon});
+  final int badgeCount;
+  _SubMenuItem({required this.index, required this.label, required this.icon, this.badgeCount = 0});
 }
 
 class _AnimatedStatusIcon extends StatefulWidget {

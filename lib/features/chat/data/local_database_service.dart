@@ -104,4 +104,22 @@ class LocalDatabaseService {
       orderBy: 'id ASC'
     );
   }
+
+  Future<void> wipeDatabase() async {
+    if (kIsWeb) return;
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    try {
+      final dbPath = join(await getDatabasesPath(), 'ebm_chat_v2.db');
+      final file = File(dbPath);
+      if (await file.exists()) {
+        await file.delete();
+        debugPrint("Local SQLite database deleted successfully.");
+      }
+    } catch (e) {
+      debugPrint("Error deleting local database: $e");
+    }
+  }
 }

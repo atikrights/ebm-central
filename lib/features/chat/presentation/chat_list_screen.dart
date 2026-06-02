@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../data/chat_models.dart';
 import '../data/chat_service.dart';
 import '../data/websocket_service.dart';
+import '../data/unread_chat_count_provider.dart';
 import '../../../core/auth/auth_provider.dart';
 import 'chat_detail_screen.dart';
 import 'chat_profile_setup_screen.dart';
@@ -100,12 +101,21 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         _loadConversations();
       } else if (event.eventName == 'message.status') {
          setState(() {
-            for (var conv in _conversations) {
-              if (conv.lastMessage['id'].toString() == data['message_id'].toString()) {
+            for (int i = 0; i < _conversations.length; i++) {
+              final conv = _conversations[i];
+              if (conv.lastMessage['id'].toString() == data['id'].toString()) {
                 conv.lastMessage['status'] = data['status'];
+                if (data['status'] == 'read') {
+                  _conversations[i] = Conversation(
+                    user: conv.user,
+                    lastMessage: conv.lastMessage,
+                    unreadCount: 0,
+                  );
+                }
               }
             }
          });
+         ref.read(unreadChatCountProvider.notifier).refreshCount();
       }
     } catch (e) {
       debugPrint("List WS Error: $e");
@@ -423,8 +433,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                   ],
                 ),
               ),
-              onTap: () {
-                Navigator.push(
+              onTap: () async {
+                await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => ChatDetailScreen(
@@ -434,6 +444,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                     ),
                   ),
                 );
+                _loadConversations();
               },
             ),
           ),
@@ -445,7 +456,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   Widget _buildStatusIcon(String status) {
     switch (status) {
       case 'read':
-        return const Icon(Icons.done_all, size: 16, color: Colors.cyanAccent);
+        return const Icon(Icons.done_all, size: 16, color: Color(0xFF34B7F1));
       case 'delivered':
         return const Icon(Icons.done_all, size: 16, color: Colors.white38);
       case 'sent':
@@ -464,7 +475,10 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       final msgDate = DateTime(date.year, date.month, date.day);
 
       if (msgDate == today) {
-        return "${date.hour}:${date.minute.toString().padLeft(2, '0')}";
+        final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+        final minute = date.minute.toString().padLeft(2, '0');
+        final period = date.hour >= 12 ? 'PM' : 'AM';
+        return "$hour:$minute $period";
       } else if (msgDate == yesterday) {
         return "Yesterday";
       } else if (now.difference(date).inDays < 7) {
@@ -538,8 +552,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             ],
           ),
         ),
-        onTap: () {
-          Navigator.push(
+        onTap: () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => ChatDetailScreen(
@@ -549,6 +563,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
               ),
             ),
           );
+          _loadConversations();
         },
       ),
     );

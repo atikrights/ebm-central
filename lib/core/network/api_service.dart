@@ -111,11 +111,12 @@ class ApiService {
   }
 
   // ─── DELETE ───────────────────────────────────────────────────────────────
-  Future<dynamic> delete(String endpoint) async {
+  Future<dynamic> delete(String endpoint, [Map<String, dynamic>? data]) async {
     try {
       final response = await http.delete(
         Uri.parse('$baseUrl$endpoint'),
-        headers: _buildHeaders(endpoint),
+        headers: _buildHeaders(endpoint, data),
+        body: data != null ? json.encode(data) : null,
       );
       return _handleResponse(response);
     } on http.ClientException catch (e) {
@@ -187,7 +188,7 @@ class ApiService {
   Future<dynamic> postMultipart(String endpoint, Map<String, String> fields, List<http.MultipartFile> files) async {
     try {
       final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$endpoint'));
-      request.headers.addAll(_buildHeaders(endpoint, fields));
+      request.headers.addAll(_buildHeaders(endpoint, null));
       request.headers['Content-Type'] = 'multipart/form-data';
       request.fields.addAll(fields);
       request.files.addAll(files);

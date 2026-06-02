@@ -1,127 +1,76 @@
-import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_config.dart';
-import 'chat_models.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../../core/network/api_service.dart';
 import '../../../core/auth/auth_provider.dart';
+import 'chat_models.dart';
 
 final chatServiceProvider = Provider<ChatService>((ref) {
-  return ChatService(baseUrl: AppConfig.baseUrl, ref: ref);
+  return ChatService(ref: ref);
 });
 
 class ChatService {
-  final String baseUrl;
   final Ref ref;
 
-  ChatService({required this.baseUrl, required this.ref});
-
-  Future<String?> _getToken() async {
-    return ref.read(authProvider).token;
-  }
+  ChatService({required this.ref});
 
   // ── Chat Profile ────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> getProfile() async {
-    final token = await _getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/chat/profile'),
-      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 10));
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else if (response.statusCode == 401) {
-      ref.read(authProvider.notifier).logout();
-      throw Exception('Session expired. Please logout and login again.');
-    } else {
-      throw Exception('Failed to load profile: ${response.statusCode}');
-    }
+    final apiService = ref.read(apiServiceProvider);
+    final response = await apiService.get('/chat/profile');
+    return response as Map<String, dynamic>;
   }
 
   Future<bool> setupProfile(String nickname) async {
-    final token = await _getToken();
-    final response = await http.post(
-      Uri.parse('$baseUrl/chat/profile/setup'),
-      headers: {
-        'Authorization': 'Bearer $token', 
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'chat_nickname': nickname}),
-    );
-    return response.statusCode == 200;
+    final apiService = ref.read(apiServiceProvider);
+    final response = await apiService.post('/chat/profile/setup', {'chat_nickname': nickname});
+    return response != null;
   }
 
   Future<Map<String, dynamic>> setupProfileWithResponse(String nickname) async {
-    final token = await _getToken();
-    final response = await http.post(
-      Uri.parse('$baseUrl/chat/profile/setup'),
-      headers: {
-        'Authorization': 'Bearer $token', 
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'chat_nickname': nickname}),
-    );
-    return jsonDecode(response.body);
+    final apiService = ref.read(apiServiceProvider);
+    final response = await apiService.post('/chat/profile/setup', {'chat_nickname': nickname});
+    return response as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> updateProfile({String? nickname, String? bio, String? about}) async {
-    final token = await _getToken();
-    final response = await http.post(
-      Uri.parse('$baseUrl/chat/profile/update'),
-      headers: {
-        'Authorization': 'Bearer $token', 
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        if (nickname != null) 'chat_nickname': nickname,
-        if (bio != null) 'chat_bio': bio,
-        if (about != null) 'chat_about': about,
-      }),
-    );
-    return jsonDecode(response.body);
+    final apiService = ref.read(apiServiceProvider);
+    final response = await apiService.post('/chat/profile/update', {
+      if (nickname != null) 'chat_nickname': nickname,
+      if (bio != null) 'chat_bio': bio,
+      if (about != null) 'chat_about': about,
+    });
+    return response as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> getProfileInfo() async {
-    final token = await _getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/chat/profile'),
-      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    );
-    return jsonDecode(response.body);
+    final apiService = ref.read(apiServiceProvider);
+    final response = await apiService.get('/chat/profile');
+    return response as Map<String, dynamic>;
   }
 
   // ── Direct Messages ─────────────────────────────────────────────────────
 
   Future<List<Conversation>> getConversations() async {
-    final token = await _getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/dm/conversations'),
-      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 10));
-    if (response.statusCode == 200) {
-      List data = jsonDecode(response.body);
+    final apiService = ref.read(apiServiceProvider);
+    try {
+      final List data = await apiService.get('/dm/conversations');
       return data.map((e) => Conversation.fromJson(e)).toList();
+    } catch (_) {
+      return [];
     }
-    return [];
   }
 
   Future<List<DirectMessage>> getMessages(int userId) async {
-    final token = await _getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/dm/messages/$userId'),
-      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    );
-    if (response.statusCode == 200) {
-      Map<String, dynamic> data = jsonDecode(response.body);
-      List messages = data['data'];
+    final apiService = ref.read(apiServiceProvider);
+    try {
+      final Map<String, dynamic> data = await apiService.get('/dm/messages/$userId');
+      final List messages = data['data'];
       return messages.map((e) => DirectMessage.fromJson(e)).toList();
+    } catch (_) {
+      return [];
     }
-    return [];
   }
 
   Future<DirectMessage?> sendMessage({
@@ -130,82 +79,57 @@ class ChatService {
     String type = 'text',
     dynamic file,
   }) async {
-    final token = await _getToken();
-    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/dm/send'));
-    request.headers['Authorization'] = 'Bearer $token';
-    request.headers['Accept'] = 'application/json';
+    final apiService = ref.read(apiServiceProvider);
+    final Map<String, String> fields = {
+      'receiver_id': receiverId.toString(),
+      if (message != null) 'message': message,
+      'message_type': type,
+    };
 
-    request.fields['receiver_id'] = receiverId.toString();
-    if (message != null) request.fields['message'] = message;
-    request.fields['message_type'] = type;
-
-    if (file != null) {
-      if (kIsWeb) {
-        if (file is http.MultipartFile) {
-          request.files.add(file);
-        }
-      } else {
-         // MultipartFile from UI is cross-platform safe
-      }
+    final List<http.MultipartFile> files = [];
+    if (file != null && file is http.MultipartFile) {
+      files.add(file);
     }
 
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
-
-    if (response.statusCode == 201 || response.statusCode == 200) {
-      return DirectMessage.fromJson(jsonDecode(response.body));
-    }
-    throw Exception('Failed to send message: ${response.statusCode}');
+    final response = await apiService.postMultipart('/dm/send', fields, files);
+    return DirectMessage.fromJson(response as Map<String, dynamic>);
   }
 
   Future<void> markAsRead(int senderId) async {
-    final token = await _getToken();
-    await http.patch(
-      Uri.parse('$baseUrl/dm/read/$senderId'),
-      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    );
+    final apiService = ref.read(apiServiceProvider);
+    await apiService.patch('/dm/read/$senderId');
   }
 
   Future<ChatUser?> findUserByChatId(String chatId) async {
-    final token = await _getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/dm/find/$chatId'),
-      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    );
-    if (response.statusCode == 200) {
-      return ChatUser.fromJson(jsonDecode(response.body));
+    final apiService = ref.read(apiServiceProvider);
+    try {
+      final response = await apiService.get('/dm/find/$chatId');
+      return ChatUser.fromJson(response as Map<String, dynamic>);
+    } catch (_) {
+      return null;
     }
-    return null;
   }
 
   /// Returns all users in the same team as the current user.
-  /// Uses the team-scoped /teams/members endpoint (backed by TeamHandler).
-  /// Admin sees all their subordinates; Sub-Admin/Manager/Staff see teammates.
   Future<List<Map<String, dynamic>>> getTeamUsers() async {
-    final token = await _getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/teams/members'),
-      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 10));
-
-    if (response.statusCode == 200) {
-      final Map<String, dynamic> body = jsonDecode(response.body);
+    final apiService = ref.read(apiServiceProvider);
+    try {
+      final Map<String, dynamic> body = await apiService.get('/teams/members');
       final List members = body['members'] ?? [];
       return members.cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
     }
-    return [];
   }
 
   Future<Map<String, dynamic>?> findUserByNumber(String number) async {
-    final token = await _getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/chat/profile/find/$number'),
-      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    );
-    if (response.statusCode == 200) {
-      return Map<String, dynamic>.from(jsonDecode(response.body));
+    final apiService = ref.read(apiServiceProvider);
+    try {
+      final response = await apiService.get('/chat/profile/find/$number');
+      return Map<String, dynamic>.from(response);
+    } catch (_) {
+      return null;
     }
-    return null;
   }
 
   // ── Legacy / AI Methods ────────────────────────────────────────────────
@@ -223,49 +147,48 @@ class ChatService {
         'created_at': m.createdAt.toIso8601String(),
       }).toList();
     }
-    
-    final token = await _getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/chats?receiver_type=$receiverType'),
-      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 10));
 
-    if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map<Map<String, dynamic>>((item) {
-        final isAi = item['is_ai'] == true;
-        return {
-          'id': item['id'],
-          'message': item['message'] ?? '',
-          'isMe': !isAi,
-          'sender': isAi ? 'AI Assistant' : 'Me',
-          'created_at': item['created_at'],
-        };
-      }).toList();
-    }
-    throw Exception('Failed to load chats');
+    final apiService = ref.read(apiServiceProvider);
+    final List data = await apiService.get('/chats?receiver_type=$receiverType');
+    return data.map<Map<String, dynamic>>((item) {
+      final isAi = item['is_ai'] == true;
+      return {
+        'id': item['id'],
+        'message': item['message'] ?? '',
+        'isMe': !isAi,
+        'sender': isAi ? 'AI Assistant' : 'Me',
+        'created_at': item['created_at'],
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getDeltaSync(int lastId) async {
+    final apiService = ref.read(apiServiceProvider);
+    final List data = await apiService.get('/dm/sync?last_id=$lastId');
+    final myIdStr = ref.read(authProvider).userId?.toString() ?? '';
+    return data.map<Map<String, dynamic>>((e) {
+      final bool isMe = e['sender_id']?.toString() == myIdStr;
+      return {
+        'id': e['id'],
+        'sender': isMe ? 'Me' : (e['sender']?['name'] ?? 'User'),
+        'message': e['message'],
+        'isMe': isMe,
+        'status': e['status'] ?? 'sent',
+        'created_at': e['created_at'] ?? DateTime.now().toIso8601String(),
+        'sender_id': e['sender_id']?.toString(),
+        'receiver_id': e['receiver_id']?.toString(),
+      };
+    }).toList();
   }
 
   Future<String> getAiReply(String prompt) async {
-    final token = await _getToken();
-    final response = await http.post(
-      Uri.parse('$baseUrl/chat/ai/generate'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'message': prompt}),
-    );
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['reply'] ?? '';
-    }
-    throw Exception('AI Reply failed');
+    final apiService = ref.read(apiServiceProvider);
+    final response = await apiService.post('/chat/ai/generate', {'message': prompt});
+    return response['reply'] ?? '';
   }
 
   Future<String> draftMessage(String text) async {
-    return "Draft: $text"; 
+    return "Draft: $text";
   }
 
   Future<Map<String, dynamic>?> syncMessage(String receiverType, String text) async {
@@ -273,30 +196,15 @@ class ChatService {
       final msg = await sendMessage(receiverId: int.parse(receiverType), message: text);
       return msg?.toJson();
     } else {
-       final token = await _getToken();
-       final response = await http.post(
-        Uri.parse('$baseUrl/chats'),
-        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json', 'Content-Type': 'application/json'},
-        body: jsonEncode({'receiver_type': receiverType, 'message': text}),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return jsonDecode(response.body);
-      }
-      throw Exception('Failed to sync message');
+      final apiService = ref.read(apiServiceProvider);
+      final response = await apiService.post('/chats', {'receiver_type': receiverType, 'message': text});
+      return response as Map<String, dynamic>;
     }
   }
 
   Future<bool> clearChat(String receiverType) async {
-    final token = await _getToken();
-    final response = await http.delete(
-      Uri.parse('$baseUrl/chats/clear'),
-      headers: {
-        'Authorization': 'Bearer $token', 
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'receiver_type': receiverType}),
-    );
-    return response.statusCode == 200;
+    final apiService = ref.read(apiServiceProvider);
+    final response = await apiService.delete('/chats/clear', {'receiver_type': receiverType});
+    return response != null;
   }
 }

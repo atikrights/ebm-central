@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -8,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../network/api_service.dart';
 import '../../features/chat/data/websocket_service.dart';
+import '../../features/chat/data/local_database_service.dart';
 
 // ─────────────────────────────────────────────
 // Auth State Model
@@ -90,10 +92,17 @@ class AuthState {
 // Auth Notifier
 // ─────────────────────────────────────────────
 class AuthNotifier extends Notifier<AuthState> {
+  Timer? _sessionVerifyTimer;
+
   @override
   AuthState build() {
     _restoreSession();
     
+    // Clean up timer on provider disposal
+    ref.onDispose(() {
+      _sessionVerifyTimer?.cancel();
+    });
+
     // ── Listen to real-time security context evictions ───────────────
     ref.listenSelf((previous, current) {
       if (current.isLoggedIn && current.userId != null) {
@@ -101,8 +110,10 @@ class AuthNotifier extends Notifier<AuthState> {
           userId: current.userId!,
           token: current.token,
         );
+        _startSessionVerifyTimer();
       } else {
         ref.read(webSocketServiceProvider).disconnect();
+        _stopSessionVerifyTimer();
       }
     });
 
@@ -131,8 +142,39 @@ class AuthNotifier extends Notifier<AuthState> {
     return const AuthState();
   }
 
+  void _startSessionVerifyTimer() {
+    _sessionVerifyTimer?.cancel();
+    // Verify session every 60 seconds to support robust real-time session eviction on all platforms (including Windows Desktop)
+    _sessionVerifyTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
+      if (state.isLoggedIn && state.token != null) {
+        _verifySessionAsync(
+          state.token!,
+          state.role ?? 'STAFF',
+          state.name,
+          state.email,
+          state.userId,
+        );
+      }
+    });
+  }
+
+  void _stopSessionVerifyTimer() {
+    _sessionVerifyTimer?.cancel();
+    _sessionVerifyTimer = null;
+  }
+
   Future<void> _restoreSession() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // SECURE: On Web, only force login with password for SUPER_ADMIN role.
+    // Allow persistent sessions for regular administrative roles (Admin, Sub-Admin) so they don't have to re-login.
+    if (kIsWeb) {
+      final cachedRole = prefs.getString('user_role');
+      if (cachedRole?.toUpperCase() == 'SUPER_ADMIN') {
+        state = state.copyWith(isInitializing: false, isLoggedIn: false);
+        return;
+      }
+    }
     final deviceId = prefs.getString('ebm_secure_device_id') ?? '';
     
     // Attempt to read encrypted token. If not present, fall back to plain token (migration)
@@ -429,9 +471,13 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> logout() async {
+    _stopSessionVerifyTimer();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     await SecureLocalStore.clear('auth_token');
+    
+    // Secure Cleanup: Wipe local SQLite database file entirely on logout
+    await LocalDatabaseService().wipeDatabase();
     
     final api = ref.read(apiServiceProvider);
     api.clearToken();
