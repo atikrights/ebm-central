@@ -113,11 +113,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       }
       if (next.isLoggedIn) {
         final redirectPath = GoRouterState.of(context).uri.queryParameters['redirect'];
-        if (redirectPath != null && redirectPath.isNotEmpty) {
-          context.go(redirectPath);
-        } else {
-          context.go('/');
-        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            if (redirectPath != null && redirectPath.isNotEmpty) {
+              context.go(redirectPath);
+            } else {
+              context.go('/');
+            }
+          }
+        });
       }
     });
 

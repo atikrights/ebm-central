@@ -63,6 +63,7 @@ class CompanyExternalQuota {
     return {
       'id': id,
       'companyId': companyId,
+      'company_id': companyId,
       'earn': earn,
       'expense': expense,
       'date': date.millisecondsSinceEpoch,
@@ -70,9 +71,13 @@ class CompanyExternalQuota {
       'tag': tag,
       'qid': qid,
       'earnDescription': earnDescription,
+      'earn_description': earnDescription,
       'earnTime': earnTime,
+      'earn_time': earnTime,
       'expenseDescription': expenseDescription,
+      'expense_description': expenseDescription,
       'expenseTime': expenseTime,
+      'expense_time': expenseTime,
     };
   }
 
@@ -82,19 +87,45 @@ class CompanyExternalQuota {
         ? 'QID-${rawId.substring(0, 8).toUpperCase()}'
         : 'QID-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
+    DateTime parsedDate;
+    if (map['date'] == null) {
+      parsedDate = DateTime.now();
+    } else if (map['date'] is int) {
+      parsedDate = DateTime.fromMillisecondsSinceEpoch(map['date']).toLocal();
+    } else if (map['date'] is String) {
+      final dateStr = map['date'] as String;
+      // If it doesn't end with Z and doesn't contain a timezone offset, append 'Z'
+      // to ensure it is parsed as UTC, then converted to local.
+      if (!dateStr.endsWith('Z') && !dateStr.contains('+') && !dateStr.contains(RegExp(r'-\d{2}:\d{2}'))) {
+        final normalizedStr = dateStr.replaceAll(' ', 'T') + 'Z';
+        parsedDate = (DateTime.tryParse(normalizedStr) ?? DateTime.tryParse(dateStr) ?? DateTime.now()).toLocal();
+      } else {
+        parsedDate = (DateTime.tryParse(dateStr) ?? DateTime.now()).toLocal();
+      }
+    } else {
+      parsedDate = DateTime.now();
+    }
+
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
+
     return CompanyExternalQuota(
       id: rawId,
-      companyId: map['companyId'] ?? '',
-      earn: (map['earn'] ?? 0.0).toDouble(),
-      expense: (map['expense'] ?? 0.0).toDouble(),
-      date: DateTime.fromMillisecondsSinceEpoch(map['date'] ?? 0),
+      companyId: (map['companyId'] ?? map['company_id'] ?? '').toString(),
+      earn: parseDouble(map['earn']),
+      expense: parseDouble(map['expense']),
+      date: parsedDate,
       title: map['title'] ?? 'Untitled Quota',
       tag: map['tag'] ?? 'General',
       qid: map['qid'] ?? fallbackQid,
-      earnDescription: map['earnDescription'] ?? '',
-      earnTime: map['earnTime'] ?? '',
-      expenseDescription: map['expenseDescription'] ?? '',
-      expenseTime: map['expenseTime'] ?? '',
+      earnDescription: map['earnDescription'] ?? map['earn_description'] ?? '',
+      earnTime: map['earnTime'] ?? map['earn_time'] ?? '',
+      expenseDescription: map['expenseDescription'] ?? map['expense_description'] ?? '',
+      expenseTime: map['expenseTime'] ?? map['expense_time'] ?? '',
     );
   }
 

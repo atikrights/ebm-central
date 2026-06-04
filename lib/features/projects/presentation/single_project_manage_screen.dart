@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'dart:ui';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +11,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:universal_html/html.dart' as html;
+import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../models/project.dart';
@@ -16,6 +21,9 @@ import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../tasks/providers/task_provider.dart';
 import '../../tasks/models/system_task.dart';
+import '../../tasks/presentation/task_workspace_screen.dart';
+import 'package:uuid/uuid.dart';
+
 
 class SingleProjectManageScreen extends ConsumerStatefulWidget {
   final String projectId;
@@ -1692,131 +1700,240 @@ class _PlansTabCentralState extends State<_PlansTabCentral> {
       groupedPlans[groupHeader]!.add(plan);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Pinned Full-Width Create Plan Bar at the Top ─────────────────
-        Padding(
-          padding: EdgeInsets.only(
-            left: isMobile ? 12 : 24,
-            right: isMobile ? 12 : 24,
-            top: isMobile ? 16 : 24,
-            bottom: 8,
+    Widget buildCreatePlanBar() {
+      return Padding(
+        padding: EdgeInsets.only(
+          left: isMobile ? 12 : 24,
+          right: isMobile ? 12 : 24,
+          top: isMobile ? 16 : 24,
+          bottom: 8,
+        ),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 12 : 16,
+            vertical: isMobile ? 12 : 8,
           ),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 12 : 16,
-              vertical: isMobile ? 12 : 8,
+          decoration: BoxDecoration(
+            color: widget.isDark 
+                ? const Color(0xFF0F111A).withOpacity(0.8)
+                : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: color.withOpacity(0.15),
+              width: 1.0,
             ),
-            decoration: BoxDecoration(
-              color: widget.isDark 
-                  ? const Color(0xFF0F111A).withOpacity(0.8)
-                  : const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: color.withOpacity(0.15),
-                width: 1.0,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(widget.isDark ? 0.2 : 0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(widget.isDark ? 0.2 : 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ]
+          ),
+          child: isMobile 
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          IconsaxPlusLinear.hierarchy_3,
+                          size: 13,
+                          color: color,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'NEW STRATEGIC PLAN',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 9,
+                            letterSpacing: 1.2,
+                            color: widget.isDark ? Colors.white60 : Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _titleCtrl,
+                      style: TextStyle(
+                        color: widget.isDark ? Colors.white : Colors.black87,
+                        fontSize: 12,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Plan title...',
+                        hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
+                        filled: true,
+                        fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: color.withOpacity(0.4)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _descCtrl,
+                      style: TextStyle(
+                        color: widget.isDark ? Colors.white : Colors.black87,
+                        fontSize: 12,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Brief objective...',
+                        hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
+                        filled: true,
+                        fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: color.withOpacity(0.4)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: _isCreating ? null : _handleCreatePlan,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: color,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: _isCreating 
+                          ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 1.5))
+                          : const Icon(IconsaxPlusLinear.add, size: 14),
+                      label: const Text('DEPLOY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                    ),
+                  ],
                 )
-              ]
-            ),
-            child: isMobile 
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            IconsaxPlusLinear.hierarchy_3,
-                            size: 13,
-                            color: color,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'NEW STRATEGIC PLAN',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 9,
-                              letterSpacing: 1.2,
-                              color: widget.isDark ? Colors.white60 : Colors.black54,
-                            ),
-                          ),
-                        ],
+              : Row(
+                  children: [
+                    Icon(
+                      IconsaxPlusLinear.hierarchy_3,
+                      size: 13,
+                      color: color,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'NEW PLAN',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 9,
+                        letterSpacing: 1.2,
+                        color: widget.isDark ? Colors.white60 : Colors.black54,
                       ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _titleCtrl,
-                        style: TextStyle(
-                          color: widget.isDark ? Colors.white : Colors.black87,
-                          fontSize: 12,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Plan title...',
-                          hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
-                          filled: true,
-                          fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(
-                              color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
-                            ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        height: 34,
+                        child: TextField(
+                          controller: _titleCtrl,
+                          style: TextStyle(
+                            color: widget.isDark ? Colors.white : Colors.black87,
+                            fontSize: 12,
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(
-                              color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                          decoration: InputDecoration(
+                            hintText: 'Plan title...',
+                            hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
+                            filled: true,
+                            fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                              ),
                             ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: color.withOpacity(0.4)),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: color.withOpacity(0.4)),
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _descCtrl,
-                        style: TextStyle(
-                          color: widget.isDark ? Colors.white : Colors.black87,
-                          fontSize: 12,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Brief objective...',
-                          hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
-                          filled: true,
-                          fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(
-                              color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
-                            ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 3,
+                      child: Container(
+                        height: 34,
+                        child: TextField(
+                          controller: _descCtrl,
+                          style: TextStyle(
+                            color: widget.isDark ? Colors.white : Colors.black87,
+                            fontSize: 12,
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(
-                              color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                          decoration: InputDecoration(
+                            hintText: 'Brief objective (optional)...',
+                            hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
+                            filled: true,
+                            fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                              ),
                             ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: color.withOpacity(0.4)),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: color.withOpacity(0.4)),
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      ElevatedButton.icon(
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      height: 34,
+                      child: ElevatedButton.icon(
                         onPressed: _isCreating ? null : _handleCreatePlan,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: color,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -1827,211 +1944,130 @@ class _PlansTabCentralState extends State<_PlansTabCentral> {
                             : const Icon(IconsaxPlusLinear.add, size: 14),
                         label: const Text('DEPLOY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                       ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Icon(
-                        IconsaxPlusLinear.hierarchy_3,
-                        size: 13,
-                        color: color,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'NEW PLAN',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 9,
-                          letterSpacing: 1.2,
-                          color: widget.isDark ? Colors.white60 : Colors.black54,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 2,
-                        child: Container(
-                          height: 34,
-                          child: TextField(
-                            controller: _titleCtrl,
-                            style: TextStyle(
-                              color: widget.isDark ? Colors.white : Colors.black87,
-                              fontSize: 12,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'Plan title...',
-                              hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
-                              filled: true,
-                              fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: color.withOpacity(0.4)),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        flex: 3,
-                        child: Container(
-                          height: 34,
-                          child: TextField(
-                            controller: _descCtrl,
-                            style: TextStyle(
-                              color: widget.isDark ? Colors.white : Colors.black87,
-                              fontSize: 12,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'Brief objective (optional)...',
-                              hintStyle: TextStyle(fontSize: 12, color: widget.isDark ? Colors.white38 : Colors.black38),
-                              filled: true,
-                              fillColor: widget.isDark ? Colors.black.withOpacity(0.2) : Colors.white,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: color.withOpacity(0.4)),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
-                        height: 34,
-                        child: ElevatedButton.icon(
-                          onPressed: _isCreating ? null : _handleCreatePlan,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: color,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          icon: _isCreating 
-                              ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 1.5))
-                              : const Icon(IconsaxPlusLinear.add, size: 14),
-                          label: const Text('DEPLOY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-        
-        // ── Scrollable Timeline List Grouped by Date ─────────────────────
-        Expanded(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.only(
-              left: isMobile ? 12 : 24,
-              right: isMobile ? 12 : 24,
-              bottom: isMobile ? 16 : 24,
-              top: 8,
-            ),
-            child: plans.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.only(top: 60),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(IconsaxPlusLinear.hierarchy, size: 40, color: widget.isDark ? Colors.white10 : Colors.black.withOpacity(0.1)),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No plans yet. Deploy your first plan above.',
-                          style: TextStyle(
-                            color: widget.isDark ? Colors.white38 : Colors.black38,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
                     ),
-                  ),
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: groupedPlans.entries.map((entry) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Date divider header capsule with full-width gradient line
-                        Padding(
-                          padding: const EdgeInsets.only(top: 16, bottom: 12),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: widget.isDark ? const Color(0xFF1E2230) : Colors.black.withOpacity(0.04),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: widget.isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
-                                  ),
-                                ),
-                                child: Text(
-                                  entry.key.toUpperCase(),
-                                  style: TextStyle(
-                                    color: widget.isDark ? Colors.white70 : Colors.black.withOpacity(0.75),
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 1.0,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Container(
-                                  height: 1,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        widget.isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1),
-                                        widget.isDark ? Colors.white.withOpacity(0.0) : Colors.black.withOpacity(0.0),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        
-                        // List of plan cards under this date group
-                        ...entry.value.map((plan) => _buildPlanCard(plan, color, isMobile)),
-                      ],
-                    );
-                  }).toList(),
+                  ],
                 ),
-          ),
         ),
-      ],
+      );
+    }
+
+    Widget buildTimelineList() {
+      return plans.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.only(top: 60),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(IconsaxPlusLinear.hierarchy, size: 40, color: widget.isDark ? Colors.white10 : Colors.black.withOpacity(0.1)),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No plans yet. Deploy your first plan above.',
+                      style: TextStyle(
+                        color: widget.isDark ? Colors.white38 : Colors.black38,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: groupedPlans.entries.map((entry) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16, bottom: 12),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: widget.isDark ? const Color(0xFF1E2230) : Colors.black.withOpacity(0.04),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: widget.isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+                              ),
+                            ),
+                            child: Text(
+                              entry.key.toUpperCase(),
+                              style: TextStyle(
+                                color: widget.isDark ? Colors.white70 : Colors.black.withOpacity(0.75),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Container(
+                              height: 1,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    widget.isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1),
+                                    widget.isDark ? Colors.white.withOpacity(0.0) : Colors.black.withOpacity(0.0),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ...entry.value.map((plan) => _buildPlanCard(plan, color, isMobile)),
+                  ],
+                );
+              }).toList(),
+            );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useScrollableParent = constraints.maxHeight < 400;
+        if (useScrollableParent) {
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                buildCreatePlanBar(),
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: isMobile ? 12 : 24,
+                    right: isMobile ? 12 : 24,
+                    bottom: isMobile ? 16 : 24,
+                    top: 8,
+                  ),
+                  child: buildTimelineList(),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            buildCreatePlanBar(),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.only(
+                  left: isMobile ? 12 : 24,
+                  right: isMobile ? 12 : 24,
+                  bottom: isMobile ? 16 : 24,
+                  top: 8,
+                ),
+                child: buildTimelineList(),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -2549,7 +2585,6 @@ class _PlansTabCentralState extends State<_PlansTabCentral> {
 }
 
 // ── Plan Console (Kanban) ──────────────────────────────────────────────────────
-// ── Plan Console (Kanban) ──────────────────────────────────────────────────────
 class _PlanConsoleCentral extends ConsumerStatefulWidget {
   final Project project;
   final Plan plan;
@@ -2567,251 +2602,1008 @@ class _PlanConsoleCentral extends ConsumerStatefulWidget {
 }
 
 class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
+  final _searchCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(taskProvider.notifier).syncWithDatabase(
-        projectId: widget.project.id,
-        planId: widget.plan.id,
         companyId: widget.project.companyId,
       );
     });
   }
 
   @override
-  Widget build(BuildContext context) {
-    final color = widget.project.brandColor;
-    final isMobile = MediaQuery.of(context).size.width < 768;
-    final isDesktop = !isMobile && MediaQuery.of(context).size.width > 1024;
-    final isDark = widget.isDark;
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
-    // Retrieve real tasks for this plan
-    final tasks = ref.watch(taskProvider).allTasks.where((t) => t.planId == widget.plan.id).toList();
+  Color _priorityColor(TaskPriority p) {
+    switch (p) {
+      case TaskPriority.critical: return Colors.redAccent;
+      case TaskPriority.high: return Colors.orangeAccent;
+      case TaskPriority.medium: return Colors.indigoAccent;
+      default: return Colors.blueAccent;
+    }
+  }
 
-    final todoTasks = tasks.where((t) => t.status == TaskStatus.todo).toList();
-    final inProgressTasks = tasks.where((t) => t.status == TaskStatus.inProgress).toList();
-    final reviewTasks = tasks.where((t) => t.status == TaskStatus.review).toList();
-    final doneTasks = tasks.where((t) => t.status == TaskStatus.done).toList();
-    final completedTasks = tasks.where((t) => t.status == TaskStatus.completed).toList();
+  Color _getColumnColor(TaskStatus status, Color brandColor, bool isDark) {
+    if (isDark) {
+      switch (status) {
+        case TaskStatus.todo: return brandColor;
+        case TaskStatus.inProgress: return Colors.blueAccent;
+        case TaskStatus.review: return Colors.amberAccent;
+        case TaskStatus.done: return Colors.greenAccent;
+        case TaskStatus.completed: return Colors.tealAccent;
+      }
+    } else {
+      switch (status) {
+        case TaskStatus.todo: return brandColor;
+        case TaskStatus.inProgress: return const Color(0xFF1E40AF); // Deep Indigo/Blue
+        case TaskStatus.review: return const Color(0xFFB45309); // Deep Amber/Orange
+        case TaskStatus.done: return const Color(0xFF15803D); // Deep Green
+        case TaskStatus.completed: return const Color(0xFF0F766E); // Deep Teal
+      }
+    }
+  }
 
-    return Padding(
-      padding: EdgeInsets.all(isMobile ? 16 : 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconButton(onPressed: widget.onBack, icon: const Icon(IconsaxPlusLinear.arrow_left_1), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.plan.title.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1)),
-                    Text('PLAN CONSOLE', style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-                  ],
-                ),
+  bool _canApprove(SystemTask task, AuthState auth) {
+    return canUserApproveTask(task, auth);
+  }
+
+  void _updateNodeStatus(SystemTask task, TaskStatus newStatus) async {
+    await ref.read(taskProvider.notifier).updateTaskStatus(task.id, newStatus);
+    
+    // Log the status update comment
+    final newComment = TaskComment(
+      id: 'cmt_${DateTime.now().millisecondsSinceEpoch}',
+      author: 'Admin',
+      content: 'Node Integrity Approved: Promoted to ${newStatus.displayName}',
+      createdAt: DateTime.now()
+    );
+    final updatedTask = task.copyWith(status: newStatus, comments: [...task.comments, newComment]);
+    await ref.read(taskProvider.notifier).updateTask(updatedTask);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Node ${task.taskNumber} shifted to ${newStatus.displayName}'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 1),
+      ));
+    }
+  }
+
+  void _exportConsoleData(List<SystemTask> tasks) async {
+    if (tasks.isEmpty) return;
+    final encoded = json.encode(tasks.map((t) => t.toMap()).toList());
+
+    if (kIsWeb) {
+      final bytes = utf8.encode(encoded);
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute("download", "Console_Bundle_${widget.plan.title}_${DateTime.now().millisecondsSinceEpoch}.json")
+        ..click();
+      html.Url.revokeObjectUrl(url);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Console bundle exported successfully.'), behavior: SnackBarBehavior.floating));
+    } else {
+      try {
+        final outputFile = await FilePicker.saveFile(
+          dialogTitle: 'Export Console Bundle',
+          fileName: "Console_Bundle_${widget.plan.title}_${DateTime.now().millisecondsSinceEpoch}.json",
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+        );
+        if (outputFile != null) {
+          final File file = File(outputFile);
+          await file.writeAsString(encoded);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Console bundle exported successfully.'), behavior: SnackBarBehavior.floating));
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error exporting data: $e'), behavior: SnackBarBehavior.floating));
+        }
+      }
+    }
+  }
+
+  Future<void> _importConsoleData(BuildContext context) async {
+    try {
+      final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['json']);
+      if (result != null && result.files.isNotEmpty) {
+        final content = result.files.first.bytes != null 
+            ? utf8.decode(result.files.first.bytes!)
+            : await File(result.files.first.path!).readAsString();
+            
+        final List decoded = json.decode(content);
+        final tp = ref.read(taskProvider.notifier);
+        int count = 0;
+        for (final m in decoded) {
+          final oldId = m['id'] ?? DateTime.now().millisecondsSinceEpoch.toString();
+          final task = SystemTask.fromMap(m).copyWith(
+            id: 'tsk_${DateTime.now().microsecondsSinceEpoch}_$oldId',
+            planId: widget.plan.id,
+            projectId: widget.project.id,
+          );
+          await tp.addTask(task, companyId: widget.project.companyId ?? '1');
+          count++;
+        }
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Registry imported successfully ($count nodes).'), behavior: SnackBarBehavior.floating));
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error importing data: $e'), behavior: SnackBarBehavior.floating));
+      }
+    }
+  }
+
+  void _showAddNodeDialog(BuildContext context, Color color, bool isDark) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Link Console Node', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter the UID of a node to link it to this plan.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                hintText: 'UID e.g. T-102...',
+                filled: true,
+                fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: color.withOpacity(0.3))),
-                child: Text(widget.plan.icode, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Expanded(
-            child: isDesktop
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _kanbanCol('TO DO', Colors.blueGrey, todoTasks, widget.isDark, ref, context),
-                    _kanbanCol('IN PROGRESS', Colors.blueAccent, inProgressTasks, widget.isDark, ref, context),
-                    _kanbanCol('REVIEW', Colors.amberAccent, reviewTasks, widget.isDark, ref, context),
-                    _kanbanCol('DONE', Colors.greenAccent, doneTasks, widget.isDark, ref, context),
-                    _kanbanCol('COMPLETED', Colors.tealAccent, completedTasks, widget.isDark, ref, context, isLast: true),
-                  ],
-                )
-              : DefaultTabController(
-                  length: 5,
-                  child: Column(
-                    children: [
-                      TabBar(
-                        isScrollable: true,
-                        tabAlignment: TabAlignment.start,
-                        indicatorColor: color,
-                        labelColor: color,
-                        unselectedLabelColor: isDark ? Colors.white38 : Colors.black38,
-                        labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                        tabs: const [Tab(text: 'TO DO'), Tab(text: 'ACTION'), Tab(text: 'REVIEW'), Tab(text: 'DONE'), Tab(text: 'COMPLETED')],
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: TabBarView(children: [
-                          _kanbanCol('TO DO', Colors.blueGrey, todoTasks, isDark, ref, context),
-                          _kanbanCol('IN PROGRESS', Colors.blueAccent, inProgressTasks, isDark, ref, context),
-                          _kanbanCol('REVIEW', Colors.amberAccent, reviewTasks, isDark, ref, context),
-                          _kanbanCol('DONE', Colors.greenAccent, doneTasks, isDark, ref, context),
-                          _kanbanCol('COMPLETED', Colors.tealAccent, completedTasks, isDark, ref, context),
-                        ]),
-                      ),
-                    ],
-                  ),
-                ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final tp = ref.read(taskProvider.notifier);
+              final query = _searchCtrl.text.trim().toUpperCase();
+              if (query.isEmpty) return;
+
+              // 1. Exact match
+              var matches = tp.allTasks.where((t) => t.taskNumber.toUpperCase() == query);
+
+              // 2. Contains match on taskNumber
+              if (matches.isEmpty) {
+                matches = tp.allTasks.where((t) => t.taskNumber.toUpperCase().contains(query));
+              }
+
+              // 3. Contains match on title
+              if (matches.isEmpty) {
+                matches = tp.allTasks.where((t) => t.title.toUpperCase().contains(query));
+              }
+
+              if (matches.isNotEmpty) {
+                final task = matches.first;
+                
+                final updatedTask = task.copyWith(
+                  planId: widget.plan.id,
+                  projectId: widget.project.id,
+                );
+                await tp.updateTask(updatedTask);
+                
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('Node ${task.taskNumber} successfully attached to traceability flow.'),
+                    behavior: SnackBarBehavior.floating,
+                    backgroundColor: color,
+                  ));
+                  _searchCtrl.clear();
+                  Navigator.pop(context);
+                }
+              } else {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('UID not found in console registry.'),
+                    behavior: SnackBarBehavior.floating,
+                  ));
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white),
+            child: const Text('Link Node'),
           ),
         ],
       ),
     );
   }
 
-  Widget _kanbanCol(String label, Color color, List<SystemTask> colTasks, bool isDark, WidgetRef ref, BuildContext context, {bool isLast = false}) {
-    return Expanded(
-      child: Container(
-        margin: EdgeInsets.only(right: isLast ? 0 : 12),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.06)),
-        ),
-        child: Column(
+  void _showArchivedTasksDialog(BuildContext context, Color color, bool isDark) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-                      const SizedBox(width: 8),
-                      Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color, letterSpacing: 1)),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '${colTasks.length}',
-                      style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: colTasks.isEmpty
-                ? Center(
-                    child: Text('No tasks', style: TextStyle(fontSize: 11, color: isDark ? Colors.white24 : Colors.black26)),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(8),
-                    itemCount: colTasks.length,
-                    itemBuilder: (ctx, idx) {
-                      final task = colTasks[idx];
-                      return _kanbanTaskCard(task, color, isDark, ref, context);
-                    },
-                  ),
-            ),
+            Icon(IconsaxPlusLinear.archive_tick, color: color),
+            const SizedBox(width: 12),
+            const Text('Archived Tasks History', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
+        content: SizedBox(
+          width: 500,
+          height: 400,
+          child: Consumer(
+            builder: (context, ref, _) {
+              final archivedTasks = ref.watch(taskProvider).allTasks.where((t) => t.planId == widget.plan.id && t.isArchived).toList();
+              if (archivedTasks.isEmpty) {
+                return Center(child: Text('No archived tasks.', style: TextStyle(color: isDark ? Colors.white38 : Colors.black38)));
+              }
+              return ListView.builder(
+                itemCount: archivedTasks.length,
+                itemBuilder: (context, index) {
+                  final task = archivedTasks[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(task.taskNumber, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 10)),
+                              const SizedBox(height: 4),
+                              Text(task.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(IconsaxPlusLinear.rotate_left, color: Colors.green),
+                          tooltip: 'Restore to Console',
+                          onPressed: () async {
+                            await ref.read(taskProvider.notifier).updateTask(task.copyWith(isArchived: false, status: TaskStatus.completed));
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task Restored!'), behavior: SnackBarBehavior.floating));
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
       ),
     );
   }
 
-  Widget _kanbanTaskCard(SystemTask task, Color color, bool isDark, WidgetRef ref, BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: isDark ? const Color(0xFF1E1E24) : Colors.white,
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+  void _showQuickAddDialog(BuildContext context, Color color, bool isDark) {
+    final titleCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+        title: const Text('Fast Generate Task', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: titleCtrl,
+          autofocus: true,
+          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+          decoration: InputDecoration(
+            hintText: 'Task objective...',
+            filled: true,
+            fillColor: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          ),
+          onSubmitted: (val) {
+            _executeQuickAdd(val, ctx);
+          },
         ),
-      ),
-      child: InkWell(
-        onTap: () {
-          showDialog(
-            context: context,
-            builder: (context) => _buildTaskDetailsModal(
-              context: context,
-              task: task,
-              color: color,
-              isDark: isDark,
-              ref: ref,
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => _executeQuickAdd(titleCtrl.text, ctx),
+            style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white),
+            child: const Text('Add to TO DO'),
+          ),
+        ],
+      )
+    );
+  }
+
+  void _executeQuickAdd(String title, BuildContext ctx) async {
+    if (title.trim().isEmpty) return;
+    final tp = ref.read(taskProvider.notifier);
+    final newTask = SystemTask(
+      id: const Uuid().v4(),
+      taskNumber: 'TSK-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+      title: title.trim(),
+      status: TaskStatus.todo,
+      planId: widget.plan.id,
+      projectId: widget.project.id,
+    );
+    await tp.addTask(newTask, companyId: widget.project.companyId ?? '1');
+    if (ctx.mounted) Navigator.pop(ctx);
+  }
+
+  void _showManageTaskDialog(BuildContext context, SystemTask task, Color accent, bool isDark) {
+    final commentCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => Consumer(
+        builder: (context, ref, _) {
+          final tp = ref.watch(taskProvider);
+          final currentTask = tp.allTasks.firstWhere((t) => t.id == task.id, orElse: () => task);
+          final auth = ref.watch(authProvider);
+          return Dialog(
+            backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Container(
+              width: 500,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(IconsaxPlusLinear.setting_4, color: accent),
+                          const SizedBox(width: 8),
+                          const Text('Manage Node', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      IconButton(icon: const Icon(IconsaxPlusLinear.close_circle), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  const Divider(),
+                  Text(currentTask.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (currentTask.status == TaskStatus.done || currentTask.status == TaskStatus.completed)
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                          child: const Row(
+                            children: [
+                              Icon(IconsaxPlusLinear.tick_circle, color: Colors.green, size: 16),
+                              SizedBox(width: 6),
+                              Text('Verified', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      const Spacer(),
+                      if (currentTask.status != TaskStatus.todo && canUserApproveTask(currentTask, auth))
+                        InkWell(
+                          onTap: () async {
+                            TaskStatus prevStatus = currentTask.status;
+                            if (currentTask.status == TaskStatus.completed) prevStatus = TaskStatus.done;
+                            else if (currentTask.status == TaskStatus.done) prevStatus = TaskStatus.review;
+                            else if (currentTask.status == TaskStatus.review) prevStatus = TaskStatus.inProgress;
+                            else if (currentTask.status == TaskStatus.inProgress) prevStatus = TaskStatus.todo;
+
+                            final newComment = TaskComment(
+                              id: 'cmt_${DateTime.now().millisecondsSinceEpoch}',
+                              author: 'Admin',
+                              content: 'Node Demoted Action: Moved to ${prevStatus.displayName}',
+                              createdAt: DateTime.now()
+                            );
+                            await ref.read(taskProvider.notifier).updateTask(currentTask.copyWith(status: prevStatus, comments: [...currentTask.comments, newComment]));
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Node Demoted to ${prevStatus.displayName}.'), behavior: SnackBarBehavior.floating));
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(color: Colors.orangeAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                            child: const Row(
+                              children: [
+                                Icon(IconsaxPlusLinear.arrow_left_2, color: Colors.orangeAccent, size: 16),
+                                SizedBox(width: 6),
+                                Text('Demote (Prev)', style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: accent.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        child: Text('Status: ${currentTask.status.displayName}', style: TextStyle(color: accent, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Text('Activity & Comments', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      task.taskNumber,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
+                    height: 160,
+                    width: double.infinity,
+                    decoration: BoxDecoration(color: isDark ? Colors.white.withOpacity(0.02) : Colors.black.withOpacity(0.02), borderRadius: BorderRadius.circular(12), border: Border.all(color: isDark ? Colors.white10 : Colors.black12)),
+                    child: currentTask.comments.isEmpty
+                        ? Center(child: Text('No activity yet. Be the first to comment.', style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 12)))
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(12),
+                            itemCount: currentTask.comments.length,
+                            itemBuilder: (c, i) {
+                              final cmt = currentTask.comments[i];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(cmt.author, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                        Text(cmt.createdAt.toString().substring(0, 16), style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(cmt.content, style: const TextStyle(fontSize: 12)),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: commentCtrl,
+                    maxLines: 2,
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 12),
+                    decoration: InputDecoration(
+                      hintText: 'Add tactical observations or reply...',
+                      filled: true,
+                      fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      suffixIcon: IconButton(
+                        icon: Icon(IconsaxPlusLinear.send_1, color: accent),
+                        onPressed: () async {
+                          if (commentCtrl.text.trim().isNotEmpty) {
+                            final newComment = TaskComment(
+                                id: 'cmt_${DateTime.now().millisecondsSinceEpoch}',
+                                author: 'Admin',
+                                content: commentCtrl.text.trim(),
+                                createdAt: DateTime.now()
+                            );
+                            await ref.read(taskProvider.notifier).updateTask(currentTask.copyWith(comments: [...currentTask.comments, newComment]));
+                            commentCtrl.clear();
+                          }
+                        },
                       ),
                     ),
                   ),
-                  Text(
-                    task.priority.name.toUpperCase(),
-                    style: TextStyle(
-                      color: _getPriorityColor(task.priority),
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: ElevatedButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      child: const Text('Update Node Integrity', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
+                  )
+                ],
+              ),
+            ),
+          );
+        }
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(bool isDesktop, Color color, bool isDark, List<SystemTask> tasks, int archivedCount) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _actionIconButton(
+          onPressed: () => _showArchivedTasksDialog(context, color, isDark),
+          icon: IconsaxPlusLinear.archive_tick,
+          tooltip: 'Registry Archive ($archivedCount)',
+          color: color,
+          isDark: isDark,
+          badge: archivedCount > 0 ? '$archivedCount' : null,
+        ),
+        _actionIconButton(
+          onPressed: () => _exportConsoleData(tasks),
+          icon: IconsaxPlusLinear.document_download,
+          tooltip: 'Export Console Bundle',
+          color: color,
+          isDark: isDark,
+        ),
+        _actionIconButton(
+          onPressed: () => _importConsoleData(context),
+          icon: IconsaxPlusLinear.document_upload,
+          tooltip: 'Import Cloud Registry',
+          color: color,
+          isDark: isDark,
+        ),
+        _actionIconButton(
+          onPressed: () => _showAddNodeDialog(context, color, isDark),
+          icon: IconsaxPlusLinear.search_status,
+          tooltip: 'Search & Attach Node',
+          color: color,
+          isDark: isDark,
+          isSpecial: true,
+        ),
+        const SizedBox(width: 8),
+        _actionIconButton(
+          onPressed: () => _showQuickAddDialog(context, color, isDark), 
+          icon: IconsaxPlusLinear.add,
+          tooltip: 'Generate New Node',
+          color: color,
+          isDark: isDark,
+          isPrimary: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _actionIconButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String tooltip,
+    required Color color,
+    required bool isDark,
+    String? badge,
+    bool isPrimary = false,
+    bool isSpecial = false,
+  }) {
+    final bgColor = isPrimary 
+        ? color 
+        : (isSpecial ? color.withOpacity(0.15) : color.withOpacity(0.08));
+    final iconColor = isPrimary ? Colors.white : color;
+
+    Widget button = Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 500),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 18, color: iconColor),
+          ),
+        ),
+      ),
+    );
+
+    if (badge != null) {
+      return Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: Badge(
+          label: Text(badge, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
+          backgroundColor: color,
+          offset: const Offset(4, -4),
+          child: button,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: button,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = widget.project.brandColor;
+    final isDesktop = MediaQuery.of(context).size.width > 750;
+    final allPlanTasks = ref.watch(taskProvider).allTasks.where((t) => t.planId == widget.plan.id).toList();
+    final tasks = allPlanTasks.where((t) => !t.isArchived).toList();
+    final archivedCount = allPlanTasks.where((t) => t.isArchived).length;
+    
+    return Padding(
+      padding: EdgeInsets.all(isDesktop ? 32 : 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                onPressed: widget.onBack,
+                icon: const Icon(IconsaxPlusLinear.arrow_left_1),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: isDesktop
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(widget.plan.title.toUpperCase(),
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.1, color: isDark ? Colors.white : Colors.black87),
+                                  overflow: TextOverflow.ellipsis, maxLines: 1),
+                              ),
+                              const SizedBox(width: 12),
+                              GestureDetector(
+                                onTap: () {
+                                  Clipboard.setData(ClipboardData(text: widget.plan.icode));
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('i-CODE Copied!'), behavior: SnackBarBehavior.floating));
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: color.withOpacity(0.3))),
+                                  child: Row(
+                                    children: [
+                                      Text(widget.plan.icode, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+                                      const SizedBox(width: 4),
+                                      Icon(Icons.copy, color: color, size: 10),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text('ADVANCED TRACE & TRACK CONSOLE',
+                            style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                        ],
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              const SizedBox(width: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: _buildActionButtons(isDesktop, color, isDark, tasks, archivedCount),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Expanded(
+            child: Builder(
+              builder: (context) {
+                if (!isDesktop) {
+                  return DefaultTabController(
+                    length: 5,
+                    child: Column(
+                      children: [
+                        TabBar(
+                          isScrollable: true,
+                          tabAlignment: TabAlignment.start,
+                          indicatorColor: color,
+                          labelColor: color,
+                          unselectedLabelColor: isDark ? Colors.white38 : Colors.black38,
+                          labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
+                          tabs: const [
+                            Tab(text: 'TO DO'),
+                            Tab(text: 'ACTION'),
+                            Tab(text: 'REVIEW'),
+                            Tab(text: 'DONE'),
+                            Tab(text: 'COMPLETED'),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: TabBarView(
+                            children: [
+                              _buildColumnList(tasks.where((t) => t.status == TaskStatus.todo).toList(), _getColumnColor(TaskStatus.todo, color, isDark), isDark),
+                              _buildColumnList(tasks.where((t) => t.status == TaskStatus.inProgress).toList(), _getColumnColor(TaskStatus.inProgress, color, isDark), isDark),
+                              _buildColumnList(tasks.where((t) => t.status == TaskStatus.review).toList(), _getColumnColor(TaskStatus.review, color, isDark), isDark),
+                              _buildColumnList(tasks.where((t) => t.status == TaskStatus.done).toList(), _getColumnColor(TaskStatus.done, color, isDark), isDark),
+                              _buildColumnList(tasks.where((t) => t.status == TaskStatus.completed).toList(), _getColumnColor(TaskStatus.completed, color, isDark), isDark),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final boardWidth = MediaQuery.of(context).size.width;
+                final useScrollableBoard = boardWidth < 1200;
+
+                Widget wrapColumn(Widget col) {
+                  return useScrollableBoard ? SizedBox(width: 280, child: col) : Expanded(child: col);
+                }
+
+                final board = Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    wrapColumn(_buildColumn('TO DO', tasks.where((t) => t.status == TaskStatus.todo).toList(), _getColumnColor(TaskStatus.todo, color, isDark), isDark, status: TaskStatus.todo, onMove: (t) => _updateNodeStatus(t, TaskStatus.todo))),
+                    wrapColumn(_buildColumn('ACTION', tasks.where((t) => t.status == TaskStatus.inProgress).toList(), _getColumnColor(TaskStatus.inProgress, color, isDark), isDark, status: TaskStatus.inProgress, onMove: (t) => _updateNodeStatus(t, TaskStatus.inProgress))),
+                    wrapColumn(_buildColumn('REVIEW', tasks.where((t) => t.status == TaskStatus.review).toList(), _getColumnColor(TaskStatus.review, color, isDark), isDark, status: TaskStatus.review, onMove: (t) => _updateNodeStatus(t, TaskStatus.review))),
+                    wrapColumn(_buildColumn('DONE', tasks.where((t) => t.status == TaskStatus.done).toList(), _getColumnColor(TaskStatus.done, color, isDark), isDark, status: TaskStatus.done, onMove: (t) => _updateNodeStatus(t, TaskStatus.done))),
+                    wrapColumn(_buildColumn('COMPLETED', tasks.where((t) => t.status == TaskStatus.completed).toList(), _getColumnColor(TaskStatus.completed, color, isDark), isDark, isLast: true, status: TaskStatus.completed, onMove: (t) => _updateNodeStatus(t, TaskStatus.completed))),
+                  ],
+                );
+
+                if (useScrollableBoard) {
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight,
+                            maxHeight: constraints.maxHeight,
+                          ),
+                          child: board,
+                        ),
+                      );
+                    }
+                  );
+                }
+                return board;
+              }
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColumn(String title, List<SystemTask> tasks, Color accent, bool isDark, {bool isLast = false, required TaskStatus status, required Function(SystemTask) onMove}) {
+    return Container(
+      margin: EdgeInsets.only(right: isLast ? 0 : 8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF111827).withOpacity(0.8) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withOpacity(0.1)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: accent, letterSpacing: 0.5), overflow: TextOverflow.ellipsis)),
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: accent.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                  child: Text('${tasks.length}', style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: DragTarget<SystemTask>(
+              onAcceptWithDetails: (details) {
+                onMove(details.data);
+              },
+              builder: (context, candidateData, rejectedData) {
+                return _buildColumnList(tasks, accent, isDark);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColumnList(List<SystemTask> tasks, Color accent, bool isDark) {
+    final auth = ref.watch(authProvider);
+    if (tasks.isEmpty) {
+      return Center(child: Text('No active nodes', style: TextStyle(color: isDark ? Colors.white12 : Colors.black12, fontSize: 10)));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      itemCount: tasks.length,
+      itemBuilder: (context, idx) {
+        final task = tasks[idx];
+        final nodeWidget = _buildConsoleNode(context, task, accent, isDark);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8.0),
+          child: Draggable<SystemTask>(
+            data: task,
+            maxSimultaneousDrags: _canApprove(task, auth) ? 1 : 0,
+            feedback: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                width: 220,
+                child: Opacity(
+                  opacity: 0.8,
+                  child: nodeWidget,
+                ),
+              ),
+            ),
+            childWhenDragging: Opacity(
+              opacity: 0.3,
+              child: nodeWidget,
+            ),
+            child: nodeWidget,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildConsoleNode(BuildContext context, SystemTask task, Color accent, bool isDark) {
+    final auth = ref.watch(authProvider);
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? Colors.white.withOpacity(0.08) : accent.withOpacity(0.1)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.25 : 0.02), blurRadius: 4, offset: const Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: InkWell(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: task.taskNumber));
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('UID Copied: ${task.taskNumber}'), behavior: SnackBarBehavior.floating));
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(child: Text(task.taskNumber, style: TextStyle(fontSize: 8, color: accent, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                        const SizedBox(width: 4),
+                        Icon(IconsaxPlusLinear.copy, size: 10, color: accent),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(color: _priorityColor(task.priority).withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                child: Text(task.priority.name.toUpperCase(), style: TextStyle(fontSize: 7, color: _priorityColor(task.priority), fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(task.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, height: 1.2, color: isDark ? Colors.white : Colors.black87), maxLines: 2, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(IconsaxPlusLinear.wallet, size: 10, color: Colors.grey),
+                  const SizedBox(width: 2),
+                  Text('\$${task.grandTotal.toInt()}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: isDark ? Colors.white70 : Colors.black87)),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(IconsaxPlusLinear.user, size: 10, color: Colors.grey),
+                  const SizedBox(width: 2),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 70),
+                    child: Text(task.assignee, style: const TextStyle(fontSize: 9, color: Colors.grey), overflow: TextOverflow.ellipsis),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                task.title,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (task.assignee.isNotEmpty) ...[
-                const SizedBox(height: 8),
+              if (task.comments.isNotEmpty)
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.person_outline, size: 10, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        task.assignee,
-                        style: const TextStyle(fontSize: 9, color: Colors.grey),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
+                    const Icon(IconsaxPlusLinear.message, size: 10, color: Colors.grey),
+                    const SizedBox(width: 3),
+                    Text('${task.comments.length}', style: const TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
                   ],
                 ),
-              ],
             ],
           ),
-        ),
+          const SizedBox(height: 8),
+          const Divider(height: 1, thickness: 0.5),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (_canApprove(task, auth))
+                InkWell(
+                  onTap: () async {
+                    if (task.status == TaskStatus.completed) {
+                      await ref.read(taskProvider.notifier).updateTask(task.copyWith(isArchived: true));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task Archived to History!'), behavior: SnackBarBehavior.floating));
+                      }
+                      return;
+                    }
+
+                    TaskStatus nextStatus = task.status;
+                    if (task.status == TaskStatus.todo) nextStatus = TaskStatus.inProgress;
+                    else if (task.status == TaskStatus.inProgress) nextStatus = TaskStatus.review;
+                    else if (task.status == TaskStatus.review) nextStatus = TaskStatus.done;
+                    else if (task.status == TaskStatus.done) nextStatus = TaskStatus.completed;
+
+                    if (nextStatus != task.status) {
+                      final newComment = TaskComment(
+                        id: 'cmt_${DateTime.now().millisecondsSinceEpoch}',
+                        author: 'Admin',
+                        content: 'Node Integrity Approved: Promoted to ${nextStatus.displayName}',
+                        createdAt: DateTime.now()
+                      );
+                      await ref.read(taskProvider.notifier).updateTask(task.copyWith(status: nextStatus, comments: [...task.comments, newComment]));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Task Promoted to ${nextStatus.displayName}!'), behavior: SnackBarBehavior.floating));
+                      }
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(color: task.status == TaskStatus.completed ? Colors.teal.withOpacity(0.1) : Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(task.status == TaskStatus.completed ? IconsaxPlusLinear.archive_tick : IconsaxPlusLinear.tick_circle, size: 10, color: task.status == TaskStatus.completed ? Colors.teal : Colors.green),
+                        const SizedBox(width: 4),
+                        Text(task.status == TaskStatus.completed ? 'ARCHIVE' : 'APPROVE', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: task.status == TaskStatus.completed ? Colors.teal : Colors.green)),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.lock_outline, size: 10, color: isDark ? Colors.white30 : Colors.black26),
+                    const SizedBox(width: 4),
+                    Text('LOCKED (READ-ONLY)', style: TextStyle(fontSize: 8, color: isDark ? Colors.white30 : Colors.black26, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: Icon(IconsaxPlusLinear.eye, size: 14, color: accent),
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => TaskWorkspaceScreen(taskId: task.id)));
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: Icon(IconsaxPlusLinear.setting_4, size: 14, color: accent),
+                    onPressed: () {
+                      _showManageTaskDialog(context, task, accent, isDark);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -4240,6 +5032,9 @@ Widget _buildTaskDetailsModal({
   required bool isDark,
   required WidgetRef ref,
 }) {
+  final auth = ref.watch(authProvider);
+  final canApprove = canUserApproveTask(task, auth);
+
   return Dialog(
     backgroundColor: Colors.transparent,
     insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
@@ -4344,8 +5139,8 @@ Widget _buildTaskDetailsModal({
                   child: DropdownButtonFormField<TaskStatus>(
                     value: task.status,
                     decoration: InputDecoration(
-                      labelText: 'CHANGE STATUS',
-                      labelStyle: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+                      labelText: canApprove ? 'CHANGE STATUS' : 'CHANGE STATUS (LOCKED - READ ONLY)',
+                      labelStyle: TextStyle(color: canApprove ? color : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
@@ -4355,7 +5150,7 @@ Widget _buildTaskDetailsModal({
                         child: Text(status.displayName, style: const TextStyle(fontSize: 12)),
                       );
                     }).toList(),
-                    onChanged: (newStatus) {
+                    onChanged: canApprove ? (newStatus) {
                       if (newStatus != null && newStatus != task.status) {
                         ref.read(taskProvider.notifier).updateTaskStatus(task.id, newStatus);
                         Navigator.pop(context);
@@ -4365,31 +5160,76 @@ Widget _buildTaskDetailsModal({
                           backgroundColor: color,
                         ));
                       }
-                    },
+                    } : null,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: color,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  elevation: 0,
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final updated = task.copyWith(planId: '', projectId: '');
+                      await ref.read(taskProvider.notifier).updateTask(updated);
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text('Detached task "${task.title}" from plan'),
+                          backgroundColor: Colors.orangeAccent,
+                          behavior: SnackBarBehavior.floating,
+                        ));
+                      }
+                    },
+                    icon: const Icon(Icons.link_off, size: 14),
+                    label: const Text('DETACH FROM PLAN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      side: const BorderSide(color: Colors.redAccent),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
                 ),
-                child: const Text('CLOSE BRIEF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: color,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      elevation: 0,
+                    ),
+                    child: const Text('CLOSE BRIEF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
     ),
   );
+}
+
+bool canUserApproveTask(SystemTask task, AuthState auth) {
+  switch (task.status) {
+    case TaskStatus.todo:
+      return auth.isAdmin || auth.isSubAdmin || auth.isManager;
+    case TaskStatus.inProgress: // ACTION
+      return auth.isManager;
+    case TaskStatus.review: // REVIEW
+      return auth.isAdmin || auth.isSubAdmin;
+    case TaskStatus.done: // DONE
+      return auth.isManager;
+    case TaskStatus.completed: // COMPLETED
+      return auth.isAdmin || auth.isSubAdmin;
+    default:
+      return false;
+  }
 }
 
 

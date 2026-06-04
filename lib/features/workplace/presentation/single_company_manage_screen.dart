@@ -29,6 +29,10 @@ import '../providers/company_external_quota_provider.dart';
 import 'widgets/quota_manage_dialog.dart';
 import 'widgets/attach_project_dialog.dart';
 import 'quota_edit_screen.dart';
+import '../models/company_stock.dart';
+import '../providers/company_stock_provider.dart';
+import 'widgets/stock_manage_dialog.dart';
+import 'stock_edit_screen.dart';
 
 class WordLimitFormatter extends TextInputFormatter {
   final int maxWords;
@@ -92,6 +96,12 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
   final TextEditingController _quotaSearchController = TextEditingController();
   String _quotaSearchQuery = '';
   String _quotaTagFilter = '';
+  bool _showTrashedQuotas = false;
+
+  // Stock Tab – Search & filter
+  final TextEditingController _stockSearchController = TextEditingController();
+  String _stockSearchQuery = '';
+  bool _showTrashedStocks = false;
 
   @override
   void initState() {
@@ -108,6 +118,7 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
     _pidController.dispose();
     _attachedSearchController.dispose();
     _quotaSearchController.dispose();
+    _stockSearchController.dispose();
     super.dispose();
   }
 
@@ -278,6 +289,32 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
     return groups;
   }
 
+  Map<String, List<CompanyStock>> _groupStocksByDate(List<CompanyStock> stocks) {
+    final Map<String, List<CompanyStock>> groups = {};
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    for (final stock in stocks) {
+      final stockDate = DateTime(stock.date.year, stock.date.month, stock.date.day);
+
+      String header;
+      if (stockDate == today) {
+        header = 'Today';
+      } else if (stockDate == yesterday) {
+        header = 'Yesterday';
+      } else {
+        header = DateFormat('MMMM dd, yyyy').format(stockDate);
+      }
+
+      if (!groups.containsKey(header)) {
+        groups[header] = [];
+      }
+      groups[header]!.add(stock);
+    }
+    return groups;
+  }
+
   void _confirmDetach(pmod.Project project) {
     showDialog(
       context: context,
@@ -365,7 +402,17 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showFounderAuthDialog(context, company);
       });
-    } else if (_selectedTabIndex != 1) {
+    } else if (_selectedTabIndex == 3 && _lastTabIndex != 3) {
+      _lastTabIndex = 3;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(companyExternalQuotaProvider(widget.companyId).notifier).fetchQuotas(showTrashed: _showTrashedQuotas);
+      });
+    } else if (_selectedTabIndex == 4 && _lastTabIndex != 4) {
+      _lastTabIndex = 4;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(companyStockProvider(widget.companyId).notifier).fetchStocks(showTrashed: _showTrashedStocks);
+      });
+    } else if (_selectedTabIndex != 1 && _selectedTabIndex != 3 && _selectedTabIndex != 4) {
       _lastTabIndex = _selectedTabIndex; // Reset tracker when leaving the tab
     }
 
@@ -616,7 +663,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       case 1: return 'Organizational Records';
       case 2: return 'Strategic Radar';
       case 3: return 'External';
-      case 4: return 'Company Settings';
+      case 4: return 'Stock';
+      case 5: return 'Company Settings';
       default: return '';
     }
   }
@@ -693,7 +741,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
                     _sidebarItem(1, Icons.archive_outlined, 'Records', isDark),
                     _sidebarItem(2, IconsaxPlusLinear.radar, 'Radar', isDark),
                     _sidebarItem(3, IconsaxPlusLinear.wallet_money, 'External', isDark),
-                    _sidebarItem(4, Icons.settings_outlined, 'Settings', isDark),
+                    _sidebarItem(4, IconsaxPlusLinear.box, 'Stock', isDark),
+                    _sidebarItem(5, Icons.settings_outlined, 'Settings', isDark),
                   ],
                 ),
               ),
@@ -820,7 +869,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       case 1: return _buildRecordsTab(company, isDark);
       case 2: return _buildMapTab(company, isDark);
       case 3: return _buildExternalTab(company, isDark);
-      case 4: return _buildSettingsContainer(company, isDark);
+      case 4: return _buildStockTab(company, isDark);
+      case 5: return _buildSettingsContainer(company, isDark);
       default: return const SizedBox.shrink();
     }
   }
@@ -906,7 +956,9 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
   Widget _buildExternalTab(Company company, bool isDark) {
     final quotas = ref.watch(companyExternalQuotaProvider(company.id));
     final notifier = ref.read(companyExternalQuotaProvider(company.id).notifier);
-    final textColor = isDark ? Colors.white : AppColors.darkText;
+    final trashedQuotas = ref.watch(companyExternalQuotaTrashedProvider(company.id));
+    final trashedCount = trashedQuotas.length;
+    final textColor = isDark ? Colors.white : AppColors.lightText;
     final hintColor = isDark ? Colors.white38 : Colors.black38;
 
     // Apply search filter (quotaSearchQuery) and tag filter (quotaTagFilter)
@@ -924,13 +976,50 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: _showTrashedQuotas ? null : FloatingActionButton.extended(
         onPressed: () {
           showDialog(
             context: context,
             builder: (context) => QuotaManageDialog(
-              onSave: (title, tag) {
-                notifier.addQuota(title: title, tag: tag);
+              onSave: (title, tag) async {
+                try {
+                  await notifier.addQuota(title: title, tag: tag);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Row(
+                          children: [
+                            Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                            SizedBox(width: 8),
+                            Text('Quota added successfully'),
+                          ],
+                        ),
+                        backgroundColor: AppColors.success,
+                        behavior: SnackBarBehavior.floating,
+                        margin: const EdgeInsets.all(16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text('Failed to add quota: $e')),
+                          ],
+                        ),
+                        backgroundColor: AppColors.error,
+                        behavior: SnackBarBehavior.floating,
+                        margin: const EdgeInsets.all(16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    );
+                  }
+                }
               },
             ),
           );
@@ -1083,6 +1172,50 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
                     ),
                   ),
                 ),
+                const SizedBox(width: 12),
+
+                // Recycle Bin Button
+                Badge(
+                  label: Text(
+                    '$trashedCount',
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  isLabelVisible: trashedCount > 0,
+                  backgroundColor: AppColors.error,
+                  child: IconButton(
+                    tooltip: _showTrashedQuotas ? 'Show Active Quotas' : 'Show Recycle Bin',
+                    icon: Icon(
+                      _showTrashedQuotas ? Icons.delete_forever : Icons.delete_outline,
+                      size: 18,
+                      color: _showTrashedQuotas ? AppColors.error : textColor,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: _showTrashedQuotas 
+                          ? AppColors.error.withOpacity(0.1) 
+                          : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: _showTrashedQuotas 
+                              ? AppColors.error 
+                              : (isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                        ),
+                      ),
+                      minimumSize: const Size(48, 48),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _showTrashedQuotas = !_showTrashedQuotas;
+                      });
+                      ref.read(companyExternalQuotaProvider(company.id).notifier)
+                         .fetchQuotas(showTrashed: _showTrashedQuotas);
+                    },
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 24),
@@ -1093,11 +1226,17 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(IconsaxPlusLinear.wallet_search, size: 64, color: hintColor),
+                      Icon(_showTrashedQuotas ? Icons.delete_sweep_outlined : IconsaxPlusLinear.wallet_search, size: 64, color: hintColor),
                       const SizedBox(height: 16),
-                      Text('No quotas added yet', style: TextStyle(color: hintColor, fontSize: 16, fontWeight: FontWeight.w500)),
+                      Text(
+                        _showTrashedQuotas ? 'Recycle Bin is empty' : 'No quotas added yet', 
+                        style: TextStyle(color: hintColor, fontSize: 16, fontWeight: FontWeight.w500)
+                      ),
                       const SizedBox(height: 8),
-                      Text('Click "Add Quota" to create your first entry', style: TextStyle(color: hintColor.withValues(alpha: 0.8), fontSize: 12)),
+                      Text(
+                        _showTrashedQuotas ? 'Deleted items will appear here' : 'Click "Add Quota" to create your first entry', 
+                        style: TextStyle(color: hintColor.withValues(alpha: 0.8), fontSize: 12)
+                      ),
                     ],
                   ),
                 ),
@@ -1185,176 +1324,158 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
                         itemBuilder: (context, idx) {
                           final quota = quotasInDate[idx];
                           final formattedTime = DateFormat('hh:mm a').format(quota.date);
+                          final formattedDate = DateFormat('dd MMM yyyy').format(quota.date);
                           final hasEarn = quota.earn > 0;
                           final hasExpense = quota.expense > 0;
+                          final screenWidth = MediaQuery.of(context).size.width;
+                          final isCompact = screenWidth < 720;
 
-                          return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 6),
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF111827) : Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05)),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    left: BorderSide(
-                                      color: hasEarn 
-                                          ? AppColors.success 
-                                          : (hasExpense ? AppColors.error : AppColors.primary),
-                                      width: 4,
-                                    ),
-                                  ),
-                                ),
-                                child: InkWell(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => QuotaEditScreen(quota: quota),
+                          // Common content layout for compact (mobile) and desktop/tablet
+                          Widget cardContent;
+                          
+                          if (isCompact) {
+                            cardContent = Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    // Left indicator pill
+                                    Container(
+                                      width: 3.5,
+                                      height: 18,
+                                      decoration: BoxDecoration(
+                                        color: hasEarn 
+                                            ? AppColors.success 
+                                            : (hasExpense ? AppColors.error : AppColors.primary),
+                                        borderRadius: BorderRadius.circular(2),
                                       ),
-                                    );
-                                  },
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: isMobile ? 12 : 20,
-                                      vertical: 14,
                                     ),
-                                    child: Row(
-                                      children: [
-                                        // Main info
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            quota.title,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: textColor,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Row(
                                             children: [
-                                              Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      quota.title,
-                                                      style: TextStyle(
-                                                        fontSize: 13,
-                                                        fontWeight: FontWeight.w700,
-                                                        color: textColor,
-                                                        overflow: TextOverflow.ellipsis,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                                    decoration: BoxDecoration(
-                                                      color: AppColors.primary.withValues(alpha: 0.08),
-                                                      borderRadius: BorderRadius.circular(6),
-                                                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.15), width: 0.5),
-                                                    ),
-                                                    child: Text(
-                                                      quota.tag,
-                                                      style: const TextStyle(
-                                                        fontSize: 9,
-                                                        fontWeight: FontWeight.w800,
-                                                        color: AppColors.primary,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Row(
-                                                children: [
-                                                  Text(
-                                                    quota.qid,
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.w800,
-                                                      color: isDark ? AppColors.primaryContainer : AppColors.primary,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Text(
-                                                    '•  $formattedTime',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: hintColor,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              if (hasEarn || hasExpense) ...[
-                                                const SizedBox(height: 10),
-                                                Wrap(
-                                                  spacing: 12,
-                                                  runSpacing: 6,
-                                                  children: [
-                                                    if (hasEarn)
-                                                      Row(
-                                                        mainAxisSize: MainAxisSize.min,
-                                                        children: [
-                                                          Container(
-                                                            padding: const EdgeInsets.all(3),
-                                                            decoration: BoxDecoration(
-                                                              color: AppColors.success.withValues(alpha: 0.1),
-                                                              shape: BoxShape.circle,
-                                                            ),
-                                                            child: const Icon(Icons.arrow_downward_rounded, color: AppColors.success, size: 8),
-                                                          ),
-                                                          const SizedBox(width: 6),
-                                                          Text(
-                                                            'Earn: \$${quota.earn.toStringAsFixed(2)}',
-                                                            style: const TextStyle(
-                                                              fontSize: 11,
-                                                              fontWeight: FontWeight.bold,
-                                                              color: AppColors.success,
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    if (hasExpense)
-                                                      Row(
-                                                        mainAxisSize: MainAxisSize.min,
-                                                        children: [
-                                                          Container(
-                                                            padding: const EdgeInsets.all(3),
-                                                            decoration: BoxDecoration(
-                                                              color: AppColors.error.withValues(alpha: 0.1),
-                                                              shape: BoxShape.circle,
-                                                            ),
-                                                            child: const Icon(Icons.arrow_upward_rounded, color: AppColors.error, size: 8),
-                                                          ),
-                                                          const SizedBox(width: 6),
-                                                          Text(
-                                                            'Expense: \$${quota.expense.toStringAsFixed(2)}',
-                                                            style: const TextStyle(
-                                                              fontSize: 11,
-                                                              fontWeight: FontWeight.bold,
-                                                              color: AppColors.error,
-                                                            ),
-                                                          ),
-                                                          if (quota.expenseTime.isNotEmpty) ...[
-                                                            const SizedBox(width: 4),
-                                                            Text(
-                                                              '(${quota.expenseTime})',
-                                                              style: TextStyle(fontSize: 9, color: hintColor),
-                                                            ),
-                                                          ],
-                                                        ],
-                                                      ),
-                                                  ],
+                                              Text(
+                                                quota.qid,
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: isDark ? AppColors.primaryContainer : AppColors.primary,
                                                 ),
-                                              ],
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                constraints: const BoxConstraints(maxWidth: 120),
+                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                decoration: BoxDecoration(
+                                                  color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05), width: 0.5),
+                                                ),
+                                                child: Text(
+                                                  quota.tag,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: 8,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: isDark ? Colors.white70 : Colors.black87,
+                                                  ),
+                                                ),
+                                              ),
                                             ],
                                           ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        // Edit icon at the right
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    // Actions (Edit, Delete vs. Restore, Force Delete)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: _showTrashedQuotas ? [
                                         IconButton(
-                                          icon: Icon(Icons.edit_note_rounded, size: 18, color: hintColor),
+                                           tooltip: 'Restore Quota',
+                                           icon: const Icon(Icons.restore_rounded, size: 16, color: AppColors.success),
+                                           style: IconButton.styleFrom(
+                                             hoverColor: AppColors.success.withOpacity(0.1),
+                                             padding: const EdgeInsets.all(6),
+                                             minimumSize: const Size(28, 28),
+                                           ),
+                                           onPressed: () async {
+                                             try {
+                                               await notifier.restoreQuota(quota.id);
+                                               if (context.mounted) {
+                                                 ScaffoldMessenger.of(context).showSnackBar(
+                                                   SnackBar(
+                                                     content: const Row(
+                                                       children: [
+                                                         Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                                                         SizedBox(width: 8),
+                                                         Text('Quota restored successfully'),
+                                                       ],
+                                                     ),
+                                                     backgroundColor: AppColors.success,
+                                                     behavior: SnackBarBehavior.floating,
+                                                     margin: const EdgeInsets.all(16),
+                                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                   ),
+                                                 );
+                                               }
+                                             } catch (e) {
+                                               if (context.mounted) {
+                                                 ScaffoldMessenger.of(context).showSnackBar(
+                                                   SnackBar(
+                                                     content: Row(
+                                                       children: [
+                                                         const Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+                                                         const SizedBox(width: 8),
+                                                         Expanded(child: Text('Failed to restore: $e')),
+                                                       ],
+                                                     ),
+                                                     backgroundColor: AppColors.error,
+                                                     behavior: SnackBarBehavior.floating,
+                                                     margin: const EdgeInsets.all(16),
+                                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                   ),
+                                                 );
+                                               }
+                                             }
+                                           },
+                                         ),
+                                        IconButton(
+                                          tooltip: 'Permanently Delete Quota',
+                                          icon: Icon(Icons.delete_forever_rounded, size: 16, color: AppColors.error.withOpacity(0.8)),
                                           style: IconButton.styleFrom(
-                                            padding: EdgeInsets.zero,
-                                            minimumSize: const Size(32, 32),
+                                            hoverColor: AppColors.error.withOpacity(0.1),
+                                            padding: const EdgeInsets.all(6),
+                                            minimumSize: const Size(28, 28),
+                                          ),
+                                          onPressed: () {
+                                            _showForceDeleteConfirmationDialog(context, quota, notifier, isDark);
+                                          },
+                                        ),
+                                      ] : [
+                                        IconButton(
+                                          tooltip: 'Edit Quota',
+                                          icon: Icon(Icons.edit_outlined, size: 16, color: hintColor),
+                                          style: IconButton.styleFrom(
+                                            hoverColor: AppColors.primary.withOpacity(0.1),
+                                            padding: const EdgeInsets.all(6),
+                                            minimumSize: const Size(28, 28),
                                           ),
                                           onPressed: () {
                                             Navigator.push(
@@ -1365,8 +1486,279 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
                                             );
                                           },
                                         ),
+                                        IconButton(
+                                          tooltip: 'Delete Quota',
+                                          icon: Icon(Icons.delete_outline_rounded, size: 16, color: AppColors.error.withOpacity(0.8)),
+                                          style: IconButton.styleFrom(
+                                            hoverColor: AppColors.error.withOpacity(0.1),
+                                            padding: const EdgeInsets.all(6),
+                                            minimumSize: const Size(28, 28),
+                                          ),
+                                          onPressed: () {
+                                            _showDeleteConfirmationDialog(context, quota, notifier, isDark);
+                                          },
+                                        ),
                                       ],
                                     ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Footprint Date & Time (indented 11.5px to align with title column)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 11.5),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.access_time_rounded, size: 10, color: hintColor),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '$formattedDate  •  $formattedTime',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              color: hintColor,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    // Earn/Expense container
+                                    _buildEarnExpenseContainer(quota, hasEarn, hasExpense, isDark, hintColor),
+                                  ],
+                                ),
+                              ],
+                            );
+                          } else {
+                            cardContent = Row(
+                              children: [
+                                // Left indicator
+                                Container(
+                                  width: 3.5,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    color: hasEarn 
+                                        ? AppColors.success 
+                                        : (hasExpense ? AppColors.error : AppColors.primary),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                // Left Column (Title, QID, Tag, Footprint Date/Time)
+                                Expanded(
+                                  flex: 3,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        quota.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: textColor,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            quota.qid,
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w800,
+                                              color: isDark ? AppColors.primaryContainer : AppColors.primary,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            constraints: const BoxConstraints(maxWidth: 120),
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05), width: 0.5),
+                                            ),
+                                            child: Text(
+                                              quota.tag,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 8,
+                                                fontWeight: FontWeight.w700,
+                                                color: isDark ? Colors.white70 : Colors.black87,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text('•', style: TextStyle(fontSize: 10, color: hintColor)),
+                                          const SizedBox(width: 8),
+                                          Icon(Icons.access_time_rounded, size: 10, color: hintColor),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '$formattedDate  •  $formattedTime',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              color: hintColor,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                // Middle Column (Earn & Expense)
+                                Expanded(
+                                  flex: 2,
+                                  child: Center(
+                                    child: _buildEarnExpenseContainer(quota, hasEarn, hasExpense, isDark, hintColor),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                // Right Column (Actions)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: _showTrashedQuotas ? [
+                                    IconButton(
+                                      tooltip: 'Restore Quota',
+                                      icon: const Icon(Icons.restore_rounded, size: 16, color: AppColors.success),
+                                      style: IconButton.styleFrom(
+                                        hoverColor: AppColors.success.withOpacity(0.1),
+                                        padding: const EdgeInsets.all(8),
+                                        minimumSize: const Size(32, 32),
+                                      ),
+                                      onPressed: () async {
+                                        try {
+                                          await notifier.restoreQuota(quota.id);
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: const Row(
+                                                  children: [
+                                                    Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                                                    SizedBox(width: 8),
+                                                    Text('Quota restored successfully'),
+                                                  ],
+                                                ),
+                                                backgroundColor: AppColors.success,
+                                                behavior: SnackBarBehavior.floating,
+                                                margin: const EdgeInsets.all(16),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Row(
+                                                  children: [
+                                                    const Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(child: Text('Failed to restore: $e')),
+                                                  ],
+                                                ),
+                                                backgroundColor: AppColors.error,
+                                                behavior: SnackBarBehavior.floating,
+                                                margin: const EdgeInsets.all(16),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      },
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      tooltip: 'Permanently Delete Quota',
+                                      icon: Icon(Icons.delete_forever_rounded, size: 16, color: AppColors.error.withOpacity(0.8)),
+                                      style: IconButton.styleFrom(
+                                        hoverColor: AppColors.error.withOpacity(0.1),
+                                        padding: const EdgeInsets.all(8),
+                                        minimumSize: const Size(32, 32),
+                                      ),
+                                      onPressed: () {
+                                        _showForceDeleteConfirmationDialog(context, quota, notifier, isDark);
+                                      },
+                                    ),
+                                  ] : [
+                                    IconButton(
+                                      tooltip: 'Edit Quota',
+                                      icon: Icon(Icons.edit_outlined, size: 16, color: hintColor),
+                                      style: IconButton.styleFrom(
+                                        hoverColor: AppColors.primary.withOpacity(0.1),
+                                        padding: const EdgeInsets.all(8),
+                                        minimumSize: const Size(32, 32),
+                                      ),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => QuotaEditScreen(quota: quota),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      tooltip: 'Delete Quota',
+                                      icon: Icon(Icons.delete_outline_rounded, size: 16, color: AppColors.error.withOpacity(0.8)),
+                                      style: IconButton.styleFrom(
+                                        hoverColor: AppColors.error.withOpacity(0.1),
+                                        padding: const EdgeInsets.all(8),
+                                        minimumSize: const Size(32, 32),
+                                      ),
+                                      onPressed: () {
+                                        _showDeleteConfirmationDialog(context, quota, notifier, isDark);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            );
+                          }
+
+                          return _QuotaListItem(
+                            quota: quota,
+                            isDark: isDark,
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF1E293B).withOpacity(0.4) : Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(isDark ? 0.05 : 0.02),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  )
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: InkWell(
+                                  onTap: _showTrashedQuotas ? null : () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => QuotaEditScreen(quota: quota),
+                                      ),
+                                    );
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    child: cardContent,
                                   ),
                                 ),
                               ),
@@ -1384,8 +1776,1262 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
     );
   }
 
+  Widget _buildEarnExpenseContainer(
+    CompanyExternalQuota quota,
+    bool hasEarn,
+    bool hasExpense,
+    bool isDark,
+    Color hintColor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.02) : Colors.black.withOpacity(0.01),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+          width: 0.5,
+        ),
+      ),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (hasEarn) ...[
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.arrow_downward_rounded, color: AppColors.success, size: 10),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Earn: \$${quota.earn.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.success,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (hasEarn && hasExpense) const SizedBox(width: 12),
+          if (hasExpense) ...[
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.arrow_upward_rounded, color: AppColors.error, size: 10),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Expense: \$${quota.expense.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.error,
+                  ),
+                ),
+                if (quota.expenseTime.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    '(${quota.expenseTime})',
+                    style: TextStyle(fontSize: 9, color: hintColor),
+                  ),
+                ],
+              ],
+            ),
+          ],
+          if (!hasEarn && !hasExpense)
+            Text(
+              'No Transaction',
+              style: TextStyle(
+                fontSize: 11,
+                color: hintColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirmationDialog(
+    BuildContext context,
+    CompanyExternalQuota quota,
+    CompanyExternalQuotaNotifier notifier,
+    bool isDark,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 340),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                )
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 28),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Delete Entry',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppColors.lightText,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Are you sure you want to move this quota to the Recycle Bin? You can restore it later.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          side: BorderSide(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.1)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          try {
+                            await notifier.deleteQuota(quota.id, isShowingTrashed: _showTrashedQuotas);
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Row(
+                                    children: [
+                                      Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                                      SizedBox(width: 8),
+                                      Text('Quota moved to Recycle Bin'),
+                                    ],
+                                  ),
+                                  backgroundColor: AppColors.error,
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: const EdgeInsets.all(16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Row(
+                                    children: [
+                                      const Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: Text('Failed to delete quota: $e')),
+                                    ],
+                                  ),
+                                  backgroundColor: AppColors.error,
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: const EdgeInsets.all(16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.error,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showForceDeleteConfirmationDialog(
+    BuildContext context,
+    CompanyExternalQuota quota,
+    CompanyExternalQuotaNotifier notifier,
+    bool isDark,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 340),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                )
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 28),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Permanently Delete',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppColors.lightText,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Are you absolutely sure? This will permanently delete this entry from the database and cannot be recovered.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          side: BorderSide(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.1)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          try {
+                            await notifier.forceDeleteQuota(quota.id);
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Row(
+                                    children: [
+                                      Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                                      SizedBox(width: 8),
+                                      Text('Quota permanently deleted'),
+                                    ],
+                                  ),
+                                  backgroundColor: AppColors.error,
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: const EdgeInsets.all(16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Row(
+                                    children: [
+                                      const Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: Text('Failed to permanently delete: $e')),
+                                    ],
+                                  ),
+                                  backgroundColor: AppColors.error,
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: const EdgeInsets.all(16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.error,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text('Delete Forever', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildValuationBadge(double minPrice, double maxPrice, bool hasAssets, bool isDark) {
+    final color = hasAssets ? AppColors.success : Colors.grey;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.2), width: 0.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.account_balance_wallet_outlined,
+            size: 10,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            hasAssets ? '\$${minPrice.toStringAsFixed(0)} - \$${maxPrice.toStringAsFixed(0)}' : 'No assets',
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStockTab(Company company, bool isDark) {
+    final stocks = ref.watch(companyStockProvider(company.id));
+    final notifier = ref.read(companyStockProvider(company.id).notifier);
+    final trashedStocks = ref.watch(companyStockTrashedProvider(company.id));
+    final trashedCount = trashedStocks.length;
+    final textColor = isDark ? Colors.white : AppColors.lightText;
+    final hintColor = isDark ? Colors.white38 : Colors.black38;
+
+    final filteredStocks = stocks.where((stock) {
+      return stock.title.toLowerCase().contains(_stockSearchQuery.toLowerCase()) ||
+          stock.stkCode.toLowerCase().contains(_stockSearchQuery.toLowerCase());
+    }).toList();
+
+    final groupedStocks = _groupStocksByDate(filteredStocks);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: _showTrashedStocks
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => StockManageDialog(
+                    onSave: (title) async {
+                      try {
+                        await notifier.addStock(title: title);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Row(children: [
+                                Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                                SizedBox(width: 8),
+                                Text('Stock added successfully'),
+                              ]),
+                              backgroundColor: AppColors.success,
+                              behavior: SnackBarBehavior.floating,
+                              margin: const EdgeInsets.all(16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(children: [
+                                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text('Failed to add stock: $e')),
+                              ]),
+                              backgroundColor: AppColors.error,
+                              behavior: SnackBarBehavior.floating,
+                              margin: const EdgeInsets.all(16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                );
+              },
+              backgroundColor: AppColors.primary,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text('Add Stock', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 32,
+          vertical: isMobile ? 16 : 24,
+        ),
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Search Bar & Recycle Bin Row
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                    ),
+                    child: TextField(
+                      controller: _stockSearchController,
+                      style: TextStyle(color: textColor, fontSize: 14),
+                      textAlignVertical: TextAlignVertical.center,
+                      onChanged: (val) => setState(() => _stockSearchQuery = val),
+                      decoration: InputDecoration(
+                        hintText: 'Search stocks (Title, STK Code)...',
+                        hintStyle: TextStyle(color: hintColor, fontSize: 13),
+                        prefixIcon: Icon(IconsaxPlusLinear.search_normal, size: 18, color: hintColor),
+                        suffixIcon: _stockSearchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16),
+                                color: hintColor,
+                                onPressed: () {
+                                  _stockSearchController.clear();
+                                  setState(() => _stockSearchQuery = '');
+                                },
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Badge(
+                  label: Text('$trashedCount',
+                      style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
+                  isLabelVisible: trashedCount > 0,
+                  backgroundColor: AppColors.error,
+                  child: IconButton(
+                    tooltip: _showTrashedStocks ? 'Show Active Stocks' : 'Show Recycle Bin',
+                    icon: Icon(
+                      _showTrashedStocks ? Icons.delete_forever : Icons.delete_outline,
+                      size: 18,
+                      color: _showTrashedStocks ? AppColors.error : textColor,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: _showTrashedStocks
+                          ? AppColors.error.withOpacity(0.1)
+                          : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: _showTrashedStocks
+                              ? AppColors.error
+                              : (isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                        ),
+                      ),
+                      minimumSize: const Size(48, 48),
+                    ),
+                    onPressed: () {
+                      setState(() => _showTrashedStocks = !_showTrashedStocks);
+                      ref.read(companyStockProvider(company.id).notifier)
+                          .fetchStocks(showTrashed: _showTrashedStocks);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            if (stocks.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 80),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(_showTrashedStocks ? Icons.delete_sweep_outlined : IconsaxPlusLinear.box,
+                          size: 64, color: hintColor),
+                      const SizedBox(height: 16),
+                      Text(
+                        _showTrashedStocks ? 'Recycle Bin is empty' : 'No stocks added yet',
+                        style: TextStyle(color: hintColor, fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _showTrashedStocks
+                            ? 'Deleted items will appear here'
+                            : 'Click "Add Stock" to create your first entry',
+                        style: TextStyle(color: hintColor.withOpacity(0.8), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (filteredStocks.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 80),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(IconsaxPlusLinear.search_status, size: 64, color: hintColor),
+                      const SizedBox(height: 16),
+                      Text('No matching stocks found',
+                          style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Text('Try adjusting your search query',
+                          style: TextStyle(color: hintColor, fontSize: 13)),
+                      const SizedBox(height: 16),
+                      TextButton.icon(
+                        onPressed: () {
+                          _stockSearchController.clear();
+                          setState(() => _stockSearchQuery = '');
+                        },
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Reset Search'),
+                        style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: groupedStocks.keys.length,
+                itemBuilder: (context, index) {
+                  final dateHeader = groupedStocks.keys.elementAt(index);
+                  final stocksInDate = groupedStocks[dateHeader]!;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16, bottom: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.05)
+                                    : Colors.black.withOpacity(0.04),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                dateHeader,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white54 : Colors.black54,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Divider(
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.05)
+                                    : Colors.black.withOpacity(0.03),
+                                height: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: stocksInDate.length,
+                        itemBuilder: (context, idx) {
+                          final stock = stocksInDate[idx];
+                          final totalMinPrice = stock.assets.fold(0.0, (sum, item) => sum + item.minPrice);
+                          final totalMaxPrice = stock.assets.fold(0.0, (sum, item) => sum + item.maxPrice);
+                          final hasAssets = stock.assets.isNotEmpty;
+
+                          final formattedTime = DateFormat('hh:mm a').format(stock.date);
+                          final formattedDate = DateFormat('dd MMM yyyy').format(stock.date);
+                          final isCompact = MediaQuery.of(context).size.width < 720;
+
+                          final actions = _showTrashedStocks
+                              ? <Widget>[
+                                  IconButton(
+                                    tooltip: 'Restore Stock',
+                                    icon: const Icon(Icons.restore_rounded,
+                                        size: 16, color: AppColors.success),
+                                    style: IconButton.styleFrom(
+                                      hoverColor: AppColors.success.withOpacity(0.1),
+                                      padding: EdgeInsets.all(isCompact ? 6 : 8),
+                                      minimumSize: Size(isCompact ? 28 : 32, isCompact ? 28 : 32),
+                                    ),
+                                    onPressed: () async {
+                                      try {
+                                        await notifier.restoreStock(stock.id);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: const Row(children: [
+                                                Icon(Icons.check_circle_outline_rounded,
+                                                    color: Colors.white, size: 18),
+                                                SizedBox(width: 8),
+                                                Text('Stock restored successfully'),
+                                              ]),
+                                              backgroundColor: AppColors.success,
+                                              behavior: SnackBarBehavior.floating,
+                                              margin: const EdgeInsets.all(16),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(12)),
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Row(children: [
+                                                const Icon(Icons.error_outline_rounded,
+                                                    color: Colors.white, size: 18),
+                                                const SizedBox(width: 8),
+                                                Expanded(child: Text('Failed to restore: $e')),
+                                              ]),
+                                              backgroundColor: AppColors.error,
+                                              behavior: SnackBarBehavior.floating,
+                                              margin: const EdgeInsets.all(16),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(12)),
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
+                                  if (!isCompact) const SizedBox(width: 4),
+                                  IconButton(
+                                    tooltip: 'Permanently Delete',
+                                    icon: Icon(Icons.delete_forever_rounded,
+                                        size: 16, color: AppColors.error.withOpacity(0.8)),
+                                    style: IconButton.styleFrom(
+                                      hoverColor: AppColors.error.withOpacity(0.1),
+                                      padding: EdgeInsets.all(isCompact ? 6 : 8),
+                                      minimumSize: Size(isCompact ? 28 : 32, isCompact ? 28 : 32),
+                                    ),
+                                    onPressed: () =>
+                                        _showStockForceDeleteDialog(context, stock, notifier, isDark),
+                                  ),
+                                ]
+                              : <Widget>[
+                                  IconButton(
+                                    tooltip: 'Edit Stock',
+                                    icon: Icon(Icons.edit_outlined, size: 16, color: hintColor),
+                                    style: IconButton.styleFrom(
+                                      hoverColor: AppColors.primary.withOpacity(0.1),
+                                      padding: EdgeInsets.all(isCompact ? 6 : 8),
+                                      minimumSize: Size(isCompact ? 28 : 32, isCompact ? 28 : 32),
+                                    ),
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => StockEditScreen(stock: stock),
+                                      ),
+                                    ),
+                                  ),
+                                  if (!isCompact) const SizedBox(width: 4),
+                                  IconButton(
+                                    tooltip: 'Delete Stock',
+                                    icon: Icon(Icons.delete_outline_rounded,
+                                        size: 16, color: AppColors.error.withOpacity(0.8)),
+                                    style: IconButton.styleFrom(
+                                      hoverColor: AppColors.error.withOpacity(0.1),
+                                      padding: EdgeInsets.all(isCompact ? 6 : 8),
+                                      minimumSize: Size(isCompact ? 28 : 32, isCompact ? 28 : 32),
+                                    ),
+                                    onPressed: () =>
+                                        _showStockDeleteDialog(context, stock, notifier, isDark),
+                                  ),
+                                ];
+
+                          Widget cardContent;
+                          if (isCompact) {
+                            cardContent = Row(
+                              children: [
+                                Container(
+                                  width: 3.5,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                      color: AppColors.primary,
+                                      borderRadius: BorderRadius.circular(2)),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        stock.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: textColor),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 4,
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primary.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(5),
+                                              border: Border.all(
+                                                  color: AppColors.primary.withOpacity(0.25),
+                                                  width: 0.5),
+                                            ),
+                                            child: Text(
+                                              stock.stkCode,
+                                              style: const TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: AppColors.primary,
+                                                  letterSpacing: 1),
+                                            ),
+                                          ),
+                                          _buildValuationBadge(totalMinPrice, totalMaxPrice, hasAssets, isDark),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.access_time_rounded,
+                                                  size: 9, color: hintColor),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                formattedDate,
+                                                style: TextStyle(
+                                                    fontSize: 9,
+                                                    color: hintColor,
+                                                    fontWeight: FontWeight.w500),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Row(mainAxisSize: MainAxisSize.min, children: actions),
+                              ],
+                            );
+                          } else {
+                            cardContent = Row(
+                              children: [
+                                Container(
+                                  width: 3.5,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                      color: AppColors.primary,
+                                      borderRadius: BorderRadius.circular(2)),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 3,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        stock.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: textColor),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 7, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(5),
+                                          border: Border.all(
+                                              color: AppColors.primary.withOpacity(0.25),
+                                              width: 0.5),
+                                        ),
+                                        child: Text(
+                                          stock.stkCode,
+                                          style: const TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w900,
+                                              color: AppColors.primary,
+                                              letterSpacing: 1.2),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  flex: 2,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _buildValuationBadge(totalMinPrice, totalMaxPrice, hasAssets, isDark),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  flex: 2,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.access_time_rounded,
+                                          size: 11, color: hintColor),
+                                      const SizedBox(width: 5),
+                                      Flexible(
+                                        child: Text(
+                                          '$formattedDate  •  $formattedTime',
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: hintColor,
+                                              fontWeight: FontWeight.w500),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Row(mainAxisSize: MainAxisSize.min, children: actions),
+                              ],
+                            );
+                          }
+
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF1E293B).withOpacity(0.4)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                  color: isDark
+                                      ? Colors.white.withOpacity(0.08)
+                                      : Colors.black.withOpacity(0.04)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(isDark ? 0.05 : 0.02),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                )
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: InkWell(
+                                onTap: _showTrashedStocks
+                                    ? null
+                                    : () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                StockEditScreen(stock: stock),
+                                          ),
+                                        ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
+                                  child: cardContent,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showStockDeleteDialog(
+    BuildContext context,
+    CompanyStock stock,
+    CompanyStockNotifier notifier,
+    bool isDark,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 340),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10))
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                      color: AppColors.error.withOpacity(0.1),
+                      shape: BoxShape.circle),
+                  child: const Icon(Icons.delete_outline_rounded,
+                      color: AppColors.error, size: 28),
+                ),
+                const SizedBox(height: 16),
+                Text('Delete Stock',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : AppColors.lightText)),
+                const SizedBox(height: 8),
+                Text(
+                  'Move "${stock.title}" to the Recycle Bin? You can restore it later.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white70 : Colors.black54),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          side: BorderSide(
+                              color: isDark
+                                  ? Colors.white10
+                                  : Colors.black.withOpacity(0.1)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text('Cancel',
+                            style: TextStyle(
+                                color: isDark ? Colors.white70 : Colors.black54,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          try {
+                            await notifier.deleteStock(stock.id,
+                                isShowingTrashed: _showTrashedStocks);
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Row(children: [
+                                    Icon(Icons.check_circle_outline_rounded,
+                                        color: Colors.white, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Stock moved to Recycle Bin'),
+                                  ]),
+                                  backgroundColor: AppColors.error,
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: const EdgeInsets.all(16),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Row(children: [
+                                    const Icon(Icons.error_outline_rounded,
+                                        color: Colors.white, size: 18),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                        child: Text('Failed to delete: $e')),
+                                  ]),
+                                  backgroundColor: AppColors.error,
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: const EdgeInsets.all(16),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.error,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text('Delete',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showStockForceDeleteDialog(
+    BuildContext context,
+    CompanyStock stock,
+    CompanyStockNotifier notifier,
+    bool isDark,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 340),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10))
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                      color: AppColors.error.withOpacity(0.15),
+                      shape: BoxShape.circle),
+                  child: const Icon(Icons.warning_amber_rounded,
+                      color: AppColors.error, size: 28),
+                ),
+                const SizedBox(height: 16),
+                Text('Permanently Delete',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : AppColors.lightText)),
+                const SizedBox(height: 8),
+                Text(
+                  'Permanently delete "${stock.title}"? This cannot be undone.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white70 : Colors.black54),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          side: BorderSide(
+                              color: isDark
+                                  ? Colors.white10
+                                  : Colors.black.withOpacity(0.1)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text('Cancel',
+                            style: TextStyle(
+                                color: isDark ? Colors.white70 : Colors.black54,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          try {
+                            await notifier.forceDeleteStock(stock.id);
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Row(children: [
+                                    Icon(Icons.check_circle_outline_rounded,
+                                        color: Colors.white, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Stock permanently deleted'),
+                                  ]),
+                                  backgroundColor: AppColors.error,
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: const EdgeInsets.all(16),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Row(children: [
+                                    const Icon(Icons.error_outline_rounded,
+                                        color: Colors.white, size: 18),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                        child: Text(
+                                            'Failed to permanently delete: $e')),
+                                  ]),
+                                  backgroundColor: AppColors.error,
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: const EdgeInsets.all(16),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.error,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text('Delete Forever',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildConfigureTab(Company company, bool isDark) {
-    final textColor = isDark ? Colors.white : AppColors.darkText;
+    final textColor = isDark ? Colors.white : AppColors.lightText;
     final subTextColor = isDark ? Colors.white70 : Colors.black54;
     final hintColor = isDark ? Colors.white38 : Colors.black38;
     final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
@@ -1820,42 +3466,169 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
   Widget _buildOverviewTab(Company company, bool isDark) {
     final w = MediaQuery.of(context).size.width;
     final isMobile = w < 600;
+    final isTablet = w >= 600 && w < 1000;
     final paddingVal = isMobile ? 16.0 : 32.0;
 
+    // 1. Live Assets valuation calculations
+    final stocks = ref.watch(companyStockProvider(company.id));
+    double totalMinAssetPrice = 0.0;
+    double totalMaxAssetPrice = 0.0;
+    for (final stock in stocks) {
+      for (final asset in stock.assets) {
+        totalMinAssetPrice += asset.minPrice;
+        totalMaxAssetPrice += asset.maxPrice;
+      }
+    }
+    final hasAssets = stocks.any((s) => s.assets.isNotEmpty);
+
+    // 2. Financial ledger / Quotas calculations
+    final quotas = ref.watch(companyExternalQuotaProvider(company.id));
+    double totalEarn = 0.0;
+    double totalExpense = 0.0;
+    for (final quota in quotas) {
+      totalEarn += quota.earn;
+      totalExpense += quota.expense;
+    }
+    final netBalance = totalEarn - totalExpense;
+
+    // 3. Projects execution calculations
+    final projects = ref.watch(projectProvider).value
+        ?.where((p) => p.companyId == company.id).toList() ?? <pmod.Project>[];
+    final totalProjects = projects.length;
+    final activeProjects = projects.where((p) => p.status == pmod.ProjectStatus.active).length;
+    final planningProjects = projects.where((p) => p.status == pmod.ProjectStatus.planning).length;
+    final completedProjects = projects.where((p) => p.status == pmod.ProjectStatus.completed).length;
+    final otherProjects = totalProjects - activeProjects - planningProjects - completedProjects;
+    final double completionRate = totalProjects > 0 ? (completedProjects / totalProjects) : 0.0;
+
+    final mainDashboard = isMobile || isTablet
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildInfoSection(company, isDark),
+              const SizedBox(height: 20),
+              _buildValuationSection(stocks, isDark),
+              const SizedBox(height: 20),
+              _buildQuotaLedgerSection(totalEarn, totalExpense, netBalance, isDark),
+              const SizedBox(height: 20),
+              _buildProjectsHubSection(totalProjects, activeProjects, planningProjects, completedProjects, otherProjects, completionRate, isDark),
+            ],
+          )
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 6,
+                child: Column(
+                  children: [
+                    _buildInfoSection(company, isDark),
+                    const SizedBox(height: 20),
+                    _buildValuationSection(stocks, isDark),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                flex: 6,
+                child: Column(
+                  children: [
+                    _buildQuotaLedgerSection(totalEarn, totalExpense, netBalance, isDark),
+                    const SizedBox(height: 20),
+                    _buildProjectsHubSection(totalProjects, activeProjects, planningProjects, completedProjects, otherProjects, completionRate, isDark),
+                  ],
+                ),
+              ),
+            ],
+          );
+
     return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
       padding: EdgeInsets.all(paddingVal),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (isMobile)
-            Column(
-              children: [
-                _buildStatCard('Active Employees', company.activeEmployees.toString(), IconsaxPlusLinear.people, Colors.blue, isDark, isMobile: true),
-                const SizedBox(height: 16),
-                _buildStatCard('Annual Revenue', '\$${(company.annualRevenue / 1000000).toStringAsFixed(1)}M', IconsaxPlusLinear.money_send, Colors.green, isDark, isMobile: true),
-                const SizedBox(height: 16),
-                _buildStatCard('Health Score', '${(company.healthScore * 100).toInt()}%', IconsaxPlusLinear.heart, Colors.red, isDark, isMobile: true),
-              ],
-            )
-          else
-            Row(
-              children: [
-                _buildStatCard('Active Employees', company.activeEmployees.toString(), IconsaxPlusLinear.people, Colors.blue, isDark, isMobile: false),
-                const SizedBox(width: 20),
-                _buildStatCard('Annual Revenue', '\$${(company.annualRevenue / 1000000).toStringAsFixed(1)}M', IconsaxPlusLinear.money_send, Colors.green, isDark, isMobile: false),
-                const SizedBox(width: 20),
-                _buildStatCard('Health Score', '${(company.healthScore * 100).toInt()}%', IconsaxPlusLinear.heart, Colors.red, isDark, isMobile: false),
-              ],
-            ),
-          const SizedBox(height: 32),
-          _buildInfoSection(company, isDark),
+          // Stat cards Grid
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: isMobile ? 1 : (isTablet ? 2 : 4),
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: isMobile ? 3.0 : 1.7,
+            children: [
+              _buildStatCard('Active Employees', company.activeEmployees.toString(), IconsaxPlusLinear.people, Colors.blue, isDark),
+              _buildStatCard('Annual Revenue', '\$${(company.annualRevenue / 1000000).toStringAsFixed(1)}M', IconsaxPlusLinear.money_send, Colors.green, isDark),
+              _buildStatCard('Health Score', '${(company.healthScore * 100).toInt()}%', IconsaxPlusLinear.heart, Colors.red, isDark),
+              _buildStatCard('Live Assets Valuation', hasAssets ? '\$${(totalMinAssetPrice / 1000).toStringAsFixed(1)}K - \$${(totalMaxAssetPrice / 1000).toStringAsFixed(1)}K' : '\$0', IconsaxPlusLinear.wallet_3, Colors.orange, isDark),
+            ],
+          ),
+          const SizedBox(height: 24),
+          mainDashboard,
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color, bool isDark, {bool isMobile = false}) {
-    final cardContent = Container(
+  Widget _buildStatCard(String label, String value, IconData icon, Color color, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B).withOpacity(0.4) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontFamily: 'Manrope',
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildValuationSection(List<CompanyStock> stocks, bool isDark) {
+    final activeStocks = stocks.where((s) => s.assets.isNotEmpty).toList();
+    double grandTotalMax = activeStocks.fold(0.0, (sum, s) => sum + s.assets.fold(0.0, (sumA, a) => sumA + a.maxPrice));
+
+    return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1866,40 +3639,397 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Live Asset Distribution',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${activeStocks.length} Valuation Registries',
+                  style: const TextStyle(fontSize: 10, color: AppColors.success, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
-              fontWeight: FontWeight.w500,
+          if (activeStocks.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Column(
+                  children: [
+                    Icon(Icons.pie_chart_outline_rounded, size: 40, color: isDark ? Colors.white24 : Colors.black.withOpacity(0.24)),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No assets registered yet',
+                      style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: activeStocks.length,
+              itemBuilder: (context, idx) {
+                final stock = activeStocks[idx];
+                final minVal = stock.assets.fold(0.0, (sum, a) => sum + a.minPrice);
+                final maxVal = stock.assets.fold(0.0, (sum, a) => sum + a.maxPrice);
+                final percent = grandTotalMax > 0 ? (maxVal / grandTotalMax) : 0.0;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  stock.stkCode,
+                                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.primary),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                stock.title,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '\$${minVal.toStringAsFixed(0)} - \$${maxVal.toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white70 : Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Stack(
+                        children: [
+                          Container(
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                          FractionallySizedBox(
+                            widthFactor: percent.clamp(0.0, 1.0),
+                            child: Container(
+                              height: 6,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [AppColors.primary, AppColors.primary.withOpacity(0.6)],
+                                ),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuotaLedgerSection(double totalEarn, double totalExpense, double netBalance, bool isDark) {
+    final double totalCombined = totalEarn + totalExpense;
+    final double earnPercent = totalCombined > 0 ? (totalEarn / totalCombined) : 0.5;
+    final isPositive = netBalance >= 0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Financial Quota Balance',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              Icon(
+                IconsaxPlusLinear.activity,
+                size: 18,
+                color: isDark ? Colors.white38 : Colors.black38,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TOTAL EARNINGS',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 0.5),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '\$${totalEarn.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.success, fontFamily: 'Manrope'),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TOTAL EXPENSES',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 0.5),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '\$${totalExpense.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.error, fontFamily: 'Manrope'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.02) : Colors.black.withOpacity(0.02),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.04)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Net Balance Score',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black.withOpacity(0.7)),
+                ),
+                Text(
+                  (isPositive ? '+' : '') + '\$${netBalance.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: isPositive ? AppColors.success : AppColors.error,
+                    fontFamily: 'Manrope',
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
+          const SizedBox(height: 20),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Earnings Ratio', style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black38)),
+                  Text('${(earnPercent * 100).toStringAsFixed(0)}%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black.withOpacity(0.7))),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: SizedBox(
+                  height: 8,
+                  child: LinearProgressIndicator(
+                    value: earnPercent,
+                    backgroundColor: AppColors.error.withOpacity(0.2),
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.success),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
 
-    if (isMobile) {
-      return cardContent;
-    }
-    return Expanded(child: cardContent);
+  Widget _buildProjectsHubSection(
+    int total, 
+    int active, 
+    int planning, 
+    int completed, 
+    int other, 
+    double completionRate, 
+    bool isDark,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Attached Projects Hub',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$total Projects',
+                  style: const TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (total == 0)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 30),
+                child: Column(
+                  children: [
+                    Icon(Icons.folder_open_rounded, size: 40, color: isDark ? Colors.white24 : Colors.black.withOpacity(0.24)),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No projects linked to this workspace',
+                      style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            Row(
+              children: [
+                _projectBreakdownItem('PLANNING', planning, Colors.blue, isDark),
+                _projectBreakdownItem('ACTIVE', active, Colors.orange, isDark),
+                _projectBreakdownItem('COMPLETED', completed, AppColors.success, isDark),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Project Completion Rate',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black.withOpacity(0.7)),
+                    ),
+                    Text(
+                      '${(completionRate * 100).toStringAsFixed(0)}%',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.primary,
+                        fontFamily: 'Manrope',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: SizedBox(
+                    height: 8,
+                    child: LinearProgressIndicator(
+                      value: completionRate,
+                      backgroundColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _projectBreakdownItem(String label, int count, Color color, bool isDark) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: color),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 0.3),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildInfoSection(Company company, bool isDark) {
@@ -1920,7 +4050,7 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
           Text(
             'Organization Details',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: FontWeight.bold,
               color: isDark ? Colors.white : Colors.black87,
             ),
@@ -3203,6 +5333,500 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
   }
 }
 
+// ── Company Cubic Bezier Link Painter ────────────────────────────────────────
+
+class _CompanyMapLinkPainter extends CustomPainter {
+  final Company company;
+  final List<pmod.Project> projects;
+  final List<SystemTask> tasks;
+  final Offset companyPos;
+  final Map<String, Offset> projectPositions;
+  final Map<String, Offset> planPositions;
+  final Map<String, Offset> taskPositions;
+  final double pulseValue;
+
+  _CompanyMapLinkPainter({
+    required this.company,
+    required this.projects,
+    required this.tasks,
+    required this.companyPos,
+    required this.projectPositions,
+    required this.planPositions,
+    required this.taskPositions,
+    required this.pulseValue,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final startPort = Offset(companyPos.dx + 240.0, companyPos.dy + 40.0);
+
+    // 1. Draw curves from Company right edge to Projects left edge
+    for (final project in projects) {
+      final projectPos = projectPositions[project.id];
+      if (projectPos != null) {
+        final endPort = Offset(projectPos.dx, projectPos.dy + 40.0);
+        
+        final path = Path()
+          ..moveTo(startPort.dx, startPort.dy)
+          ..cubicTo(
+            startPort.dx + 80.0, startPort.dy,
+            endPort.dx - 80.0, endPort.dy,
+            endPort.dx, endPort.dy,
+          );
+
+        // Draw background bezier path matching project's brandColor
+        canvas.drawPath(
+          path, 
+          Paint()
+            ..color = project.brandColor.withOpacity(0.18)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.0
+            ..strokeCap = StrokeCap.round,
+        );
+
+        // Draw active light pulse particle
+        drawPulse(canvas, path, Paint()..color = project.brandColor, pulseValue);
+      }
+    }
+
+    // 2. Draw curves from Projects right edge to Plans left edge
+    for (final project in projects) {
+      final projectPos = projectPositions[project.id];
+      if (projectPos != null) {
+        final projectStartPort = Offset(projectPos.dx + 240.0, projectPos.dy + 40.0);
+        for (final plan in project.plans) {
+          final planPos = planPositions[plan.id];
+          if (planPos != null) {
+            final endPort = Offset(planPos.dx, planPos.dy + 40.0);
+            
+            final path = Path()
+              ..moveTo(projectStartPort.dx, projectStartPort.dy)
+              ..cubicTo(
+                projectStartPort.dx + 80.0, projectStartPort.dy,
+                endPort.dx - 80.0, endPort.dy,
+                endPort.dx, endPort.dy,
+              );
+
+            canvas.drawPath(
+              path, 
+              Paint()
+                ..color = project.brandColor.withOpacity(0.15)
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.8
+                ..strokeCap = StrokeCap.round,
+            );
+
+            drawPulse(canvas, path, Paint()..color = project.brandColor, pulseValue);
+          }
+        }
+      }
+    }
+
+    // 3. Draw curves from Plans right edge to Tasks left edge
+    for (final project in projects) {
+      for (final plan in project.plans) {
+        final planPos = planPositions[plan.id];
+        if (planPos != null) {
+          final planTasks = tasks.where((t) => t.planId == plan.id).toList();
+          final planStartPort = Offset(planPos.dx + 240.0, planPos.dy + 40.0);
+          
+          for (final task in planTasks) {
+            final taskPos = taskPositions[task.id];
+            if (taskPos != null) {
+              final endPort = Offset(taskPos.dx, taskPos.dy + 40.0);
+              
+              final path = Path()
+                ..moveTo(planStartPort.dx, planStartPort.dy)
+                ..cubicTo(
+                  planStartPort.dx + 80.0, planStartPort.dy,
+                  endPort.dx - 80.0, endPort.dy,
+                  endPort.dx, endPort.dy,
+                );
+
+              final taskColor = _getSimulatedStatusColor(task.status);
+              
+              canvas.drawPath(
+                path, 
+                Paint()
+                  ..color = taskColor.withOpacity(0.12)
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 1.5
+                  ..strokeCap = StrokeCap.round,
+              );
+
+              drawPulse(canvas, path, Paint()..color = taskColor, pulseValue);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  void drawPulse(Canvas canvas, Path path, Paint paint, double t) {
+    final metrics = path.computeMetrics();
+    for (final metric in metrics) {
+      final double length = metric.length;
+      final double targetLength = length * t;
+      final tangent = metric.getTangentForOffset(targetLength);
+      if (tangent != null) {
+        final position = tangent.position;
+        
+        // Neon outer glow layer
+        final glowPaint = Paint()
+          ..color = paint.color.withOpacity(0.6)
+          ..style = PaintingStyle.fill
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0);
+        canvas.drawCircle(position, 7.0, glowPaint);
+        
+        // High intensity solid core
+        final corePaint = Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(position, 2.5, corePaint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+// ── Private Helper Mappings and Modals ───────────────────────────────────────
+
+Color _getPriorityColor(TaskPriority priority) {
+  switch (priority) {
+    case TaskPriority.low: return Colors.blueGrey;
+    case TaskPriority.medium: return Colors.blueAccent;
+    case TaskPriority.high: return Colors.orangeAccent;
+    case TaskPriority.critical: return Colors.redAccent;
+  }
+}
+
+Color _getSimulatedStatusColor(TaskStatus status) {
+  switch (status) {
+    case TaskStatus.todo: return Colors.orangeAccent;
+    case TaskStatus.inProgress: return Colors.blueAccent;
+    case TaskStatus.completed: return Colors.green;
+    case TaskStatus.review: return Colors.amberAccent;
+    case TaskStatus.done: return Colors.tealAccent;
+  }
+}
+
+Widget _modalDetailItem(String label, String value, Color valColor, bool isDark) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.white38 : Colors.black38,
+          letterSpacing: 1.2,
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        value,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: valColor,
+        ),
+      ),
+    ],
+  );
+}
+
+Widget _buildCompanyPlanDetailsModal({
+  required BuildContext context,
+  required pmod.Plan plan,
+  required Color color,
+  required bool isDark,
+}) {
+  final double budgetProgress = plan.budget > 0 ? (plan.consumedBudget / plan.budget) : 0.0;
+  return Dialog(
+    backgroundColor: Colors.transparent,
+    insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+    child: GlassContainer(
+      borderRadius: 24,
+      padding: const EdgeInsets.all(24),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 450),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: color.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    plan.icode,
+                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              plan.title,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'A critical programmatic node mapping system goals to resource allocation and active development phases.',
+              style: TextStyle(
+                fontSize: 14,
+                color: isDark ? Colors.white70 : Colors.black54,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _modalDetailItem(
+                    'STATUS',
+                    plan.status.toUpperCase(),
+                    plan.status.toLowerCase() == 'completed' ? Colors.green : Colors.blueAccent,
+                    isDark,
+                  ),
+                ),
+                Expanded(
+                  child: _modalDetailItem(
+                    'BUDGET CONSUMPTION',
+                    '${(budgetProgress * 100).toStringAsFixed(1)}%',
+                    budgetProgress > 0.85 ? Colors.redAccent : Colors.greenAccent,
+                    isDark,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _modalDetailItem(
+                    'TOTAL BUDGET',
+                    '\$${NumberFormat('#,##0.00').format(plan.budget)}',
+                    color,
+                    isDark,
+                  ),
+                ),
+                Expanded(
+                  child: _modalDetailItem(
+                    'CONSUMED AMOUNT',
+                    '\$${NumberFormat('#,##0.00').format(plan.consumedBudget)}',
+                    isDark ? Colors.white70 : Colors.black87,
+                    isDark,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: color,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  elevation: 0,
+                ),
+                child: const Text('CLOSE BRIEF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _buildCompanyTaskDetailsModal({
+  required BuildContext context,
+  required SystemTask task,
+  required Color color,
+  required bool isDark,
+  required WidgetRef ref,
+}) {
+  return Dialog(
+    backgroundColor: Colors.transparent,
+    insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+    child: GlassContainer(
+      borderRadius: 24,
+      padding: const EdgeInsets.all(24),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 450),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: color.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    task.taskNumber,
+                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              task.title,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (task.description.isNotEmpty) ...[
+              Text(
+                task.description,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.white70 : Colors.black54,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _modalDetailItem(
+                    'STATUS',
+                    task.status.displayName,
+                    _getSimulatedStatusColor(task.status),
+                    isDark,
+                  ),
+                ),
+                Expanded(
+                  child: _modalDetailItem(
+                    'PRIORITY',
+                    task.priority.name.toUpperCase(),
+                    _getPriorityColor(task.priority),
+                    isDark,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _modalDetailItem(
+                    'ALLOCATED BUDGET',
+                    '\$${NumberFormat('#,##0.00').format(task.allocatedCost)}',
+                    color,
+                    isDark,
+                  ),
+                ),
+                Expanded(
+                  child: _modalDetailItem(
+                    'ASSIGNEE',
+                    task.assignee,
+                    isDark ? Colors.white70 : Colors.black87,
+                    isDark,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<TaskStatus>(
+                    value: task.status,
+                    decoration: InputDecoration(
+                      labelText: 'CHANGE STATUS',
+                      labelStyle: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    items: TaskStatus.values.map((status) {
+                      return DropdownMenuItem<TaskStatus>(
+                        value: status,
+                        child: Text(status.displayName, style: const TextStyle(fontSize: 12)),
+                      );
+                    }).toList(),
+                    onChanged: (newStatus) {
+                      if (newStatus != null && newStatus != task.status) {
+                        ref.read(taskProvider.notifier).updateTaskStatus(task.id, newStatus);
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text('Task status updated to ${newStatus.displayName}'),
+                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: color,
+                        ));
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: color,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  elevation: 0,
+                ),
+                child: const Text('CLOSE BRIEF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+
+
+
+
+
+
 // ── Strategic Company Map Custom Subcomponents ───────────────────────────────
 
 class _CompanyFlowGraphNodeCard extends StatefulWidget {
@@ -3725,52 +6349,28 @@ class _StrategicCompanyMapCentralState extends ConsumerState<_StrategicCompanyMa
                         trackingId: plan.icode,
                         statusText: plan.status.toUpperCase(),
                         statusColor: _statusColor(plan.status),
-                        brandColor: p.brandColor,
-                        icon: IconsaxPlusLinear.hierarchy,
-                        onTap: () => showDialog(
-                          context: context,
-                          builder: (context) => _buildCompanyPlanDetailsModal(
-                            context: context,
-                            plan: plan,
-                            color: p.brandColor,
-                            isDark: isDark,
-                          ),
-                        ),
+                        brandColor: AppColors.primary,
+                        icon: IconsaxPlusLinear.task_square,
                       ),
                     );
                   })),
 
-                  // 4. Task Micro Nodes
+                  // 4. Task Nodes
                   ...tasks.map((task) {
                     final taskPos = taskPositions[task.id];
                     if (taskPos == null) return const SizedBox.shrink();
-                    final project = companyProjects.firstWhere((p) => p.id == task.projectId);
-                    final formattedDate = task.dueDate != null 
-                        ? DateFormat('yyyy-MM-dd').format(task.dueDate!)
-                        : 'No Due Date';
-                    
                     return Positioned(
                       left: taskPos.dx,
                       top: taskPos.dy,
                       child: _CompanyFlowGraphNodeCard(
                         title: task.title,
-                        subtitle: 'ASSIGNEE: ${task.assignee.toUpperCase()}',
-                        dateText: 'DUE: $formattedDate',
+                        subtitle: task.taskNumber,
+                        dateText: task.dueDate != null ? DateFormat('MMM dd, yyyy').format(task.dueDate!) : '—',
                         trackingId: task.taskNumber,
-                        statusText: task.status.displayName,
-                        statusColor: _getSimulatedStatusColor(task.status),
-                        brandColor: project.brandColor,
+                        statusText: task.status.name.toUpperCase(),
+                        statusColor: _taskStatusColor(task.status),
+                        brandColor: AppColors.primary,
                         icon: IconsaxPlusLinear.task_square,
-                        onTap: () => showDialog(
-                          context: context,
-                          builder: (context) => _buildCompanyTaskDetailsModal(
-                            context: context,
-                            task: task,
-                            color: project.brandColor,
-                            isDark: isDark,
-                            ref: ref,
-                          ),
-                        ),
                       ),
                     );
                   }),
@@ -3779,547 +6379,450 @@ class _StrategicCompanyMapCentralState extends ConsumerState<_StrategicCompanyMa
             ),
           ),
         ),
-        
-        // Zoom Controls HUD
+
+        // Zoom Controls Overlay
         Positioned(
-          bottom: 20,
-          right: 20,
-          child: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E1E24).withOpacity(0.9) : Colors.white.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ],
-            ),
-            child: Column(
-              children: [
-                _zoomBtn(Icons.add, () => _zoom(0.15), companyColor, isDark),
-                const SizedBox(height: 6),
-                _zoomBtn(Icons.remove, () => _zoom(-0.15), companyColor, isDark),
-              ],
-            ),
+          bottom: 24,
+          right: 24,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: isDark ? Colors.white10 : Colors.black12),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withOpacity(0.1), blurRadius: 8)
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      onPressed: () => _zoom(0.2),
+                      style: IconButton.styleFrom(
+                        foregroundColor:
+                            isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                    Divider(
+                        height: 1,
+                        color: isDark ? Colors.white10 : Colors.black12),
+                    IconButton(
+                      icon: const Icon(Icons.remove_rounded, size: 18),
+                      onPressed: () => _zoom(-0.2),
+                      style: IconButton.styleFrom(
+                        foregroundColor:
+                            isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _zoomBtn(IconData icon, VoidCallback onTap, Color color, bool isDark) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: color, size: 18),
-      ),
+Color _statusColor(String status) {
+  switch (status.toLowerCase()) {
+    case 'active':
+      return Colors.green;
+    case 'completed':
+      return Colors.blue;
+    case 'on hold':
+      return Colors.orange;
+    case 'planning':
+      return Colors.purple;
+    default:
+      return Colors.grey;
+  }
+}
+
+Color _taskStatusColor(TaskStatus status) {
+  switch (status) {
+    case TaskStatus.completed:
+      return Colors.green;
+    case TaskStatus.inProgress:
+      return Colors.blue;
+    case TaskStatus.todo:
+      return Colors.orange;
+    default:
+      return Colors.grey;
+  }
+}
+}
+class _QuotaListItem extends StatefulWidget {
+  final CompanyExternalQuota quota;
+  final Widget child;
+  final bool isDark;
+
+  const _QuotaListItem({
+    Key? key,
+    required this.quota,
+    required this.child,
+    required this.isDark,
+  }) : super(key: key);
+
+  @override
+  State<_QuotaListItem> createState() => _QuotaListItemState();
+}
+
+class _QuotaListItemState extends State<_QuotaListItem> {
+  OverlayEntry? _overlayEntry;
+  final ValueNotifier<Offset> _mousePosition = ValueNotifier(Offset.zero);
+
+  void _showOverlay(BuildContext context) {
+    if (_overlayEntry != null) return;
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) {
+        return _HoverCardContent(
+          quota: widget.quota,
+          mousePosition: _mousePosition,
+          isDark: widget.isDark,
+        );
+      },
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _hideOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  @override
+  void dispose() {
+    _hideOverlay();
+    _mousePosition.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDesktop = kIsWeb || 
+        defaultTargetPlatform == TargetPlatform.windows || 
+        defaultTargetPlatform == TargetPlatform.macOS || 
+        defaultTargetPlatform == TargetPlatform.linux;
+
+    if (!isDesktop) {
+      return widget.child;
+    }
+
+    return MouseRegion(
+      onEnter: (event) {
+        _mousePosition.value = event.position;
+        _showOverlay(context);
+      },
+      onHover: (event) {
+        _mousePosition.value = event.position;
+      },
+      onExit: (event) {
+        _hideOverlay();
+      },
+      child: widget.child,
+    );
+  }
+}
+
+class _HoverCardContent extends StatelessWidget {
+  final CompanyExternalQuota quota;
+  final ValueNotifier<Offset> mousePosition;
+  final bool isDark;
+
+  const _HoverCardContent({
+    Key? key,
+    required this.quota,
+    required this.mousePosition,
+    required this.isDark,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    
+    // Adaptively scale card width to be wider and more premium for desktop
+    final double maxCardWidth = screenSize.width > 1200 ? 460 : 380;
+    const double estimatedHeight = 320;
+
+    return ValueListenableBuilder<Offset>(
+      valueListenable: mousePosition,
+      builder: (context, position, child) {
+        double x = position.dx + 16;
+        double y = position.dy + 16;
+
+        if (x + maxCardWidth > screenSize.width) {
+          x = position.dx - maxCardWidth - 16;
+        }
+        if (x < 8) x = 8;
+
+        if (y + estimatedHeight > screenSize.height) {
+          y = position.dy - estimatedHeight - 16;
+        }
+        if (y < 8) y = 8;
+
+        return Positioned(
+          left: x,
+          top: y,
+          child: IgnorePointer(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                constraints: BoxConstraints(
+                  minWidth: 340,
+                  maxWidth: maxCardWidth,
+                ),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B).withOpacity(0.92) : Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(isDark ? 0.45 : 0.15),
+                      blurRadius: 24,
+                      offset: const Offset(0, 10),
+                    )
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Header (Title, QID, Tag)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      quota.title,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark ? Colors.white : AppColors.lightText,
+                                        height: 1.25,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      quota.qid,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        color: isDark ? AppColors.primaryContainer : AppColors.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: Text(
+                                  quota.tag,
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? Colors.white70 : AppColors.lightTextMuted,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          
+                          // Date & Time Row
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.access_time_rounded,
+                                size: 12,
+                                color: isDark ? Colors.white38 : Colors.black38,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                DateFormat('dd MMM yyyy • hh:mm a').format(quota.date),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark ? Colors.white54 : AppColors.lightTextMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          Divider(
+                            color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+                            height: 1,
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Earning details
+                          if (quota.earn > 0) ...[
+                            _buildSection(
+                              isDark: isDark,
+                              title: 'Earning Details',
+                              amount: '\$${quota.earn.toStringAsFixed(2)}',
+                              amountColor: AppColors.success,
+                              time: quota.earnTime,
+                              description: quota.earnDescription,
+                              icon: Icons.arrow_downward_rounded,
+                              iconBgColor: AppColors.success.withOpacity(0.1),
+                            ),
+                          ],
+                          
+                          if (quota.earn > 0 && quota.expense > 0)
+                            const SizedBox(height: 16),
+
+                          // Expense details
+                          if (quota.expense > 0) ...[
+                            _buildSection(
+                              isDark: isDark,
+                              title: 'Expense Details',
+                              amount: '\$${quota.expense.toStringAsFixed(2)}',
+                              amountColor: AppColors.error,
+                              time: quota.expenseTime,
+                              description: quota.expenseDescription,
+                              icon: Icons.arrow_upward_rounded,
+                              iconBgColor: AppColors.error.withOpacity(0.1),
+                            ),
+                          ],
+
+                          if (quota.earn == 0 && quota.expense == 0) ...[
+                            Center(
+                              child: Text(
+                                'No transactions recorded',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark ? Colors.white38 : AppColors.lightTextMuted,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Color _statusColor(String s) {
-    switch (s.toLowerCase()) {
-      case 'completed': return Colors.green;
-      case 'active': case 'in_progress': return Colors.blue;
-      case 'delayed': return Colors.orange;
-      default: return Colors.grey;
-    }
-  }
-}
-
-// ── Company Cubic Bezier Link Painter ────────────────────────────────────────
-
-class _CompanyMapLinkPainter extends CustomPainter {
-  final Company company;
-  final List<pmod.Project> projects;
-  final List<SystemTask> tasks;
-  final Offset companyPos;
-  final Map<String, Offset> projectPositions;
-  final Map<String, Offset> planPositions;
-  final Map<String, Offset> taskPositions;
-  final double pulseValue;
-
-  _CompanyMapLinkPainter({
-    required this.company,
-    required this.projects,
-    required this.tasks,
-    required this.companyPos,
-    required this.projectPositions,
-    required this.planPositions,
-    required this.taskPositions,
-    required this.pulseValue,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final startPort = Offset(companyPos.dx + 240.0, companyPos.dy + 40.0);
-
-    // 1. Draw curves from Company right edge to Projects left edge
-    for (final project in projects) {
-      final projectPos = projectPositions[project.id];
-      if (projectPos != null) {
-        final endPort = Offset(projectPos.dx, projectPos.dy + 40.0);
-        
-        final path = Path()
-          ..moveTo(startPort.dx, startPort.dy)
-          ..cubicTo(
-            startPort.dx + 80.0, startPort.dy,
-            endPort.dx - 80.0, endPort.dy,
-            endPort.dx, endPort.dy,
-          );
-
-        // Draw background bezier path matching project's brandColor
-        canvas.drawPath(
-          path, 
-          Paint()
-            ..color = project.brandColor.withOpacity(0.18)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2.0
-            ..strokeCap = StrokeCap.round,
-        );
-
-        // Draw active light pulse particle
-        drawPulse(canvas, path, Paint()..color = project.brandColor, pulseValue);
-      }
-    }
-
-    // 2. Draw curves from Projects right edge to Plans left edge
-    for (final project in projects) {
-      final projectPos = projectPositions[project.id];
-      if (projectPos != null) {
-        final projectStartPort = Offset(projectPos.dx + 240.0, projectPos.dy + 40.0);
-        for (final plan in project.plans) {
-          final planPos = planPositions[plan.id];
-          if (planPos != null) {
-            final endPort = Offset(planPos.dx, planPos.dy + 40.0);
-            
-            final path = Path()
-              ..moveTo(projectStartPort.dx, projectStartPort.dy)
-              ..cubicTo(
-                projectStartPort.dx + 80.0, projectStartPort.dy,
-                endPort.dx - 80.0, endPort.dy,
-                endPort.dx, endPort.dy,
-              );
-
-            canvas.drawPath(
-              path, 
-              Paint()
-                ..color = project.brandColor.withOpacity(0.15)
-                ..style = PaintingStyle.stroke
-                ..strokeWidth = 1.8
-                ..strokeCap = StrokeCap.round,
-            );
-
-            drawPulse(canvas, path, Paint()..color = project.brandColor, pulseValue);
-          }
-        }
-      }
-    }
-
-    // 3. Draw curves from Plans right edge to Tasks left edge
-    for (final project in projects) {
-      for (final plan in project.plans) {
-        final planPos = planPositions[plan.id];
-        if (planPos != null) {
-          final planTasks = tasks.where((t) => t.planId == plan.id).toList();
-          final planStartPort = Offset(planPos.dx + 240.0, planPos.dy + 40.0);
-          
-          for (final task in planTasks) {
-            final taskPos = taskPositions[task.id];
-            if (taskPos != null) {
-              final endPort = Offset(taskPos.dx, taskPos.dy + 40.0);
-              
-              final path = Path()
-                ..moveTo(planStartPort.dx, planStartPort.dy)
-                ..cubicTo(
-                  planStartPort.dx + 80.0, planStartPort.dy,
-                  endPort.dx - 80.0, endPort.dy,
-                  endPort.dx, endPort.dy,
-                );
-
-              final taskColor = _getSimulatedStatusColor(task.status);
-              
-              canvas.drawPath(
-                path, 
-                Paint()
-                  ..color = taskColor.withOpacity(0.12)
-                  ..style = PaintingStyle.stroke
-                  ..strokeWidth = 1.5
-                  ..strokeCap = StrokeCap.round,
-              );
-
-              drawPulse(canvas, path, Paint()..color = taskColor, pulseValue);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  void drawPulse(Canvas canvas, Path path, Paint paint, double t) {
-    final metrics = path.computeMetrics();
-    for (final metric in metrics) {
-      final double length = metric.length;
-      final double targetLength = length * t;
-      final tangent = metric.getTangentForOffset(targetLength);
-      if (tangent != null) {
-        final position = tangent.position;
-        
-        // Neon outer glow layer
-        final glowPaint = Paint()
-          ..color = paint.color.withOpacity(0.6)
-          ..style = PaintingStyle.fill
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0);
-        canvas.drawCircle(position, 7.0, glowPaint);
-        
-        // High intensity solid core
-        final corePaint = Paint()
-          ..color = Colors.white
-          ..style = PaintingStyle.fill;
-        canvas.drawCircle(position, 2.5, corePaint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
-
-// ── Private Helper Mappings and Modals ───────────────────────────────────────
-
-Color _getPriorityColor(TaskPriority priority) {
-  switch (priority) {
-    case TaskPriority.low: return Colors.blueGrey;
-    case TaskPriority.medium: return Colors.blueAccent;
-    case TaskPriority.high: return Colors.orangeAccent;
-    case TaskPriority.critical: return Colors.redAccent;
-  }
-}
-
-Color _getSimulatedStatusColor(TaskStatus status) {
-  switch (status) {
-    case TaskStatus.todo: return Colors.orangeAccent;
-    case TaskStatus.inProgress: return Colors.blueAccent;
-    case TaskStatus.completed: return Colors.green;
-    case TaskStatus.review: return Colors.amberAccent;
-    case TaskStatus.done: return Colors.tealAccent;
-  }
-}
-
-Widget _modalDetailItem(String label, String value, Color valColor, bool isDark) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        label,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: isDark ? Colors.white38 : Colors.black38,
-          letterSpacing: 1.2,
-        ),
-      ),
-      const SizedBox(height: 6),
-      Text(
-        value,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: valColor,
-        ),
-      ),
-    ],
-  );
-}
-
-Widget _buildCompanyPlanDetailsModal({
-  required BuildContext context,
-  required pmod.Plan plan,
-  required Color color,
-  required bool isDark,
-}) {
-  final double budgetProgress = plan.budget > 0 ? (plan.consumedBudget / plan.budget) : 0.0;
-  return Dialog(
-    backgroundColor: Colors.transparent,
-    insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
-    child: GlassContainer(
-      borderRadius: 24,
-      padding: const EdgeInsets.all(24),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 450),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildSection({
+    required bool isDark,
+    required String title,
+    required String amount,
+    required Color amountColor,
+    required String time,
+    required String description,
+    required IconData icon,
+    required Color iconBgColor,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: color.withOpacity(0.3)),
-                  ),
-                  child: Text(
-                    plan.icode,
-                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: iconBgColor,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: amountColor, size: 9),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(width: 8),
             Text(
-              plan.title,
+              title,
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white70 : AppColors.lightText,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              amount,
+              style: TextStyle(
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'A critical programmatic node mapping system goals to resource allocation and active development phases.',
-              style: TextStyle(
-                fontSize: 14,
-                color: isDark ? Colors.white70 : Colors.black54,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Divider(color: Colors.white10),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _modalDetailItem(
-                    'STATUS',
-                    plan.status.toUpperCase(),
-                    plan.status.toLowerCase() == 'completed' ? Colors.green : Colors.blueAccent,
-                    isDark,
-                  ),
-                ),
-                Expanded(
-                  child: _modalDetailItem(
-                    'BUDGET CONSUMPTION',
-                    '${(budgetProgress * 100).toStringAsFixed(1)}%',
-                    budgetProgress > 0.85 ? Colors.redAccent : Colors.greenAccent,
-                    isDark,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _modalDetailItem(
-                    'TOTAL BUDGET',
-                    '\$${NumberFormat('#,##0.00').format(plan.budget)}',
-                    color,
-                    isDark,
-                  ),
-                ),
-                Expanded(
-                  child: _modalDetailItem(
-                    'CONSUMED AMOUNT',
-                    '\$${NumberFormat('#,##0.00').format(plan.consumedBudget)}',
-                    isDark ? Colors.white70 : Colors.black87,
-                    isDark,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: color,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  elevation: 0,
-                ),
-                child: const Text('CLOSE BRIEF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
+                color: amountColor,
               ),
             ),
           ],
         ),
-      ),
-    ),
-  );
-}
-
-Widget _buildCompanyTaskDetailsModal({
-  required BuildContext context,
-  required SystemTask task,
-  required Color color,
-  required bool isDark,
-  required WidgetRef ref,
-}) {
-  return Dialog(
-    backgroundColor: Colors.transparent,
-    insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
-    child: GlassContainer(
-      borderRadius: 24,
-      padding: const EdgeInsets.all(24),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 450),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: color.withOpacity(0.3)),
-                  ),
-                  child: Text(
-                    task.taskNumber,
-                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              task.title,
+        if (time.isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Padding(
+            padding: const EdgeInsets.only(left: 24),
+            child: Text(
+              'Time: $time',
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black87,
+                fontSize: 10,
+                color: isDark ? Colors.white38 : AppColors.lightTextMuted,
               ),
             ),
-            const SizedBox(height: 8),
-            if (task.description.isNotEmpty) ...[
-              Text(
-                task.description,
+          ),
+        ],
+        if (description.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 24),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.06),
+                  width: 0.5,
+                ),
+              ),
+              child: Text(
+                description,
                 style: TextStyle(
-                  fontSize: 14,
-                  color: isDark ? Colors.white70 : Colors.black54,
-                  height: 1.5,
+                  fontSize: 10,
+                  height: 1.45,
+                  fontWeight: FontWeight.w400,
+                  color: isDark ? Colors.white.withOpacity(0.85) : AppColors.lightText.withOpacity(0.85),
                 ),
               ),
-              const SizedBox(height: 16),
-            ],
-            const Divider(color: Colors.white10),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _modalDetailItem(
-                    'STATUS',
-                    task.status.displayName,
-                    _getSimulatedStatusColor(task.status),
-                    isDark,
-                  ),
-                ),
-                Expanded(
-                  child: _modalDetailItem(
-                    'PRIORITY',
-                    task.priority.name.toUpperCase(),
-                    _getPriorityColor(task.priority),
-                    isDark,
-                  ),
-                ),
-              ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _modalDetailItem(
-                    'ALLOCATED BUDGET',
-                    '\$${NumberFormat('#,##0.00').format(task.allocatedCost)}',
-                    color,
-                    isDark,
-                  ),
-                ),
-                Expanded(
-                  child: _modalDetailItem(
-                    'ASSIGNEE',
-                    task.assignee,
-                    isDark ? Colors.white70 : Colors.black87,
-                    isDark,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<TaskStatus>(
-                    value: task.status,
-                    decoration: InputDecoration(
-                      labelText: 'CHANGE STATUS',
-                      labelStyle: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                    items: TaskStatus.values.map((status) {
-                      return DropdownMenuItem<TaskStatus>(
-                        value: status,
-                        child: Text(status.displayName, style: const TextStyle(fontSize: 12)),
-                      );
-                    }).toList(),
-                    onChanged: (newStatus) {
-                      if (newStatus != null && newStatus != task.status) {
-                        ref.read(taskProvider.notifier).updateTaskStatus(task.id, newStatus);
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text('Task status updated to ${newStatus.displayName}'),
-                          behavior: SnackBarBehavior.floating,
-                          backgroundColor: color,
-                        ));
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: color,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  elevation: 0,
-                ),
-                child: const Text('CLOSE BRIEF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
+          ),
+        ],
+      ],
+    );
+  }
 }

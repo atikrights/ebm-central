@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../models/company_external_quota.dart';
 import '../providers/company_external_quota_provider.dart';
@@ -58,6 +59,17 @@ class _QuotaEditScreenState extends ConsumerState<QuotaEditScreen> {
     final earnVal = double.tryParse(_earnAmountController.text) ?? 0.0;
     final expenseVal = double.tryParse(_expenseAmountController.text) ?? 0.0;
 
+    final now = DateTime.now();
+    final currentTimeString = DateFormat('hh:mm a').format(now);
+
+    final String earnTime = (earnVal > 0 && widget.quota.earnTime.isEmpty)
+        ? currentTimeString
+        : widget.quota.earnTime;
+
+    final String expenseTime = (expenseVal > 0 && widget.quota.expenseTime.isEmpty)
+        ? currentTimeString
+        : widget.quota.expenseTime;
+
     // Auto-update date to real system datetime on every save
     final updated = widget.quota.copyWith(
       title: _titleController.text.trim(),
@@ -65,26 +77,37 @@ class _QuotaEditScreenState extends ConsumerState<QuotaEditScreen> {
       earn: earnVal,
       expense: expenseVal,
       earnDescription: _earnDescController.text.trim(),
-      earnTime: '',
+      earnTime: earnTime,
       expenseDescription: _expenseDescController.text.trim(),
-      expenseTime: '',
-      date: DateTime.now(),
+      expenseTime: expenseTime,
+      date: now,
     );
 
-    await ref
-        .read(companyExternalQuotaProvider(widget.quota.companyId).notifier)
-        .updateQuota(updated);
+    try {
+      await ref
+          .read(companyExternalQuotaProvider(widget.quota.companyId).notifier)
+          .updateQuota(updated);
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Quota updated successfully.'),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    Navigator.pop(context);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Quota updated successfully.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update quota: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _delete() async {
@@ -93,7 +116,7 @@ class _QuotaEditScreenState extends ConsumerState<QuotaEditScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Quota'),
         content: const Text(
-          'Are you sure you want to permanently delete this quota? This cannot be undone.',
+          'Are you sure you want to move this quota to the Recycle Bin? You can restore it later.',
         ),
         actions: [
           TextButton(
@@ -111,19 +134,30 @@ class _QuotaEditScreenState extends ConsumerState<QuotaEditScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    await ref
-        .read(companyExternalQuotaProvider(widget.quota.companyId).notifier)
-        .deleteQuota(widget.quota.id);
+    try {
+      await ref
+          .read(companyExternalQuotaProvider(widget.quota.companyId).notifier)
+          .deleteQuota(widget.quota.id);
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Quota deleted.'),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    Navigator.pop(context);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Quota moved to Recycle Bin.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete quota: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override

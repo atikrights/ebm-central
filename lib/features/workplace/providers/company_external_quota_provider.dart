@@ -1,40 +1,40 @@
-import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/company_external_quota.dart';
+import '../../../core/network/api_service.dart';
 import 'package:uuid/uuid.dart';
 
 class CompanyExternalQuotaNotifier extends StateNotifier<List<CompanyExternalQuota>> {
   final String companyId;
-  late final String _storageKey;
+  final Ref _ref;
 
-  CompanyExternalQuotaNotifier(this.companyId) : super([]) {
-    _storageKey = 'ebm_central_external_quota_$companyId';
-    _loadFromStorage();
+  CompanyExternalQuotaNotifier(this.companyId, this._ref) : super([]) {
+    fetchQuotas();
+    _ref.read(companyExternalQuotaTrashedProvider(companyId).notifier).fetchTrashedQuotas();
   }
 
-  Future<void> _loadFromStorage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonStr = prefs.getString(_storageKey);
-    if (jsonStr != null && jsonStr.isNotEmpty) {
-      try {
-        final List<dynamic> decoded = json.decode(jsonStr);
-        final quotas = decoded.map((e) => CompanyExternalQuota.fromMap(e as Map<String, dynamic>)).toList();
+  ApiService get _api => _ref.read(apiServiceProvider);
+
+  Future<void> fetchQuotas({bool showTrashed = false}) async {
+    try {
+      final endpoint = showTrashed 
+          ? '/companies/$companyId/external-quotas/trashed' 
+          : '/companies/$companyId/external-quotas';
+      final dynamic response = await _api.get(endpoint);
+      
+      if (response is List) {
+        final quotas = response.map((e) => CompanyExternalQuota.fromMap(e as Map<String, dynamic>)).toList();
         // Sort by date descending
         quotas.sort((a, b) => b.date.compareTo(a.date));
         state = quotas;
-      } catch (e) {
-        debugPrint('Error loading external quotas for $companyId: $e');
+      } else {
+        state = [];
       }
+    } catch (e) {
+      debugPrint('Error loading external quotas for $companyId: $e');
+      state = [];
     }
-  }
-
-  Future<void> _saveToStorage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = state.map((e) => e.toMap()).toList();
-    await prefs.setString(_storageKey, json.encode(data));
   }
 
   Future<void> addQuota({required String title, required String tag}) async {
@@ -57,21 +57,86 @@ class CompanyExternalQuotaNotifier extends StateNotifier<List<CompanyExternalQuo
       expenseDescription: '',
       expenseTime: '',
     );
-    state = [newQuota, ...state];
-    await _saveToStorage();
+    
+    try {
+      await _api.post('/companies/$companyId/external-quotas', newQuota.toMap());
+      await fetchQuotas(showTrashed: false);
+    } catch (e) {
+      debugPrint('Error adding quota: $e');
+      rethrow;
+    }
   }
 
   Future<void> updateQuota(CompanyExternalQuota updatedQuota) async {
-    state = state.map((q) => q.id == updatedQuota.id ? updatedQuota : q).toList();
-    await _saveToStorage();
+    try {
+      await _api.put('/external-quotas/${updatedQuota.id}', updatedQuota.toMap());
+      await fetchQuotas(showTrashed: false);
+    } catch (e) {
+      debugPrint('Error updating quota: $e');
+      rethrow;
+    }
   }
 
-  Future<void> deleteQuota(String id) async {
-    state = state.where((q) => q.id != id).toList();
-    await _saveToStorage();
+  Future<void> deleteQuota(String id, {bool isShowingTrashed = false}) async {
+    try {
+      await _api.delete('/external-quotas/$id');
+      await fetchQuotas(showTrashed: isShowingTrashed);
+      _ref.read(companyExternalQuotaTrashedProvider(companyId).notifier).fetchTrashedQuotas();
+    } catch (e) {
+      debugPrint('Error deleting quota: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> restoreQuota(String id) async {
+    try {
+      await _api.post('/external-quotas/$id/restore', {});
+      await fetchQuotas(showTrashed: true);
+      _ref.read(companyExternalQuotaTrashedProvider(companyId).notifier).fetchTrashedQuotas();
+    } catch (e) {
+      debugPrint('Error restoring quota: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> forceDeleteQuota(String id) async {
+    try {
+      await _api.delete('/external-quotas/$id/force-delete');
+      await fetchQuotas(showTrashed: true);
+      _ref.read(companyExternalQuotaTrashedProvider(companyId).notifier).fetchTrashedQuotas();
+    } catch (e) {
+      debugPrint('Error force deleting quota: $e');
+      rethrow;
+    }
   }
 }
 
 final companyExternalQuotaProvider = StateNotifierProvider.family<CompanyExternalQuotaNotifier, List<CompanyExternalQuota>, String>((ref, companyId) {
-  return CompanyExternalQuotaNotifier(companyId);
+  return CompanyExternalQuotaNotifier(companyId, ref);
 });
+
+final companyExternalQuotaTrashedProvider = StateNotifierProvider.family<CompanyExternalQuotaTrashedNotifier, List<CompanyExternalQuota>, String>((ref, companyId) {
+  return CompanyExternalQuotaTrashedNotifier(companyId, ref);
+});
+
+class CompanyExternalQuotaTrashedNotifier extends StateNotifier<List<CompanyExternalQuota>> {
+  final String companyId;
+  final Ref _ref;
+
+  CompanyExternalQuotaTrashedNotifier(this.companyId, this._ref) : super([]) {
+    fetchTrashedQuotas();
+  }
+
+  ApiService get _api => _ref.read(apiServiceProvider);
+
+  Future<void> fetchTrashedQuotas() async {
+    try {
+      final dynamic response = await _api.get('/companies/$companyId/external-quotas/trashed');
+      if (response is List) {
+        state = response.map((e) => CompanyExternalQuota.fromMap(e as Map<String, dynamic>)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error loading trashed quotas: $e');
+    }
+  }
+}
