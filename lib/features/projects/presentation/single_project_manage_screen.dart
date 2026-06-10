@@ -74,7 +74,7 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
           ),
         );
 
-        if (_selectedTabIndex == 3 &&
+        if (_selectedTabIndex == 1 &&
             project.managerSignature.isNotEmpty &&
             project.founderSignature.isEmpty &&
             !_isAuthDialogOpen) {
@@ -228,9 +228,9 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
   String _getTabTitle(int index) {
     switch (index) {
       case 0: return 'Project Overview';
-      case 1: return 'Strategic Radar';
-      case 2: return _activePlan != null ? 'Plan Console · ${_activePlan!.title}' : 'Strategic Plans';
-      case 3: return 'Blueprint Records';
+      case 1: return 'Blueprint Records';
+      case 2: return 'Strategic Radar';
+      case 3: return _activePlan != null ? 'Plan Console · ${_activePlan!.title}' : 'Strategic Plans';
       case 4: return 'Console Log Analysis';
       case 5: return 'Project Settings';
       default: return '';
@@ -299,9 +299,9 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
               padding: const EdgeInsets.symmetric(horizontal: 10),
               children: [
                 _sidebarItem(0, IconsaxPlusLinear.grid_1, 'Overview', isDark),
-                _sidebarItem(1, IconsaxPlusLinear.radar, 'Radar', isDark),
-                _sidebarItem(2, IconsaxPlusLinear.hierarchy, 'Plans', isDark),
-                _sidebarItem(3, IconsaxPlusLinear.verify, 'Records', isDark),
+                _sidebarItem(1, IconsaxPlusLinear.verify, 'Records', isDark),
+                _sidebarItem(2, IconsaxPlusLinear.radar, 'Radar', isDark),
+                _sidebarItem(3, IconsaxPlusLinear.hierarchy, 'Plans', isDark),
                 _sidebarItem(4, IconsaxPlusLinear.document_favorite, 'Console Log', isDark),
                 _sidebarItem(5, IconsaxPlusLinear.setting_2, 'Settings', isDark),
               ],
@@ -408,8 +408,9 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
   Widget _buildContent(Project project, bool isDark) {
     switch (_selectedTabIndex) {
       case 0: return _buildOverviewTab(project, isDark);
-      case 1: return _buildRadarTab(project, isDark);
-      case 2:
+      case 1: return _buildRecordsTab(project, isDark);
+      case 2: return _buildRadarTab(project, isDark);
+      case 3:
         if (_activePlan != null) {
           return _PlanConsoleCentral(
             project: project,
@@ -424,14 +425,13 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
           ref: ref,
           onOpenConsole: (p) => setState(() => _activePlan = p),
         );
-      case 3: return _buildRecordsTab(project, isDark);
       case 4:
         return _ConsoleLogCentral(
           project: project,
           isDark: isDark,
           onOpenConsole: (p) => setState(() {
             _activePlan = p;
-            _selectedTabIndex = 2;
+            _selectedTabIndex = 3;
           }),
         );
       case 5: return _buildPlaceholderTab('Project Settings', IconsaxPlusLinear.setting_2, isDark);
@@ -472,45 +472,7 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
           const SizedBox(height: 32),
           
           if (!project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.watch(authProvider).role)) ...[
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.orangeAccent.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.orangeAccent.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(IconsaxPlusLinear.timer_1, color: Colors.orangeAccent, size: 28),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Pending Approval', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black, fontSize: 16)),
-                        const SizedBox(height: 4),
-                        Text('This project requires administrative approval before it becomes visible to the rest of the team.', style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 13)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      ref.read(projectProvider.notifier).approveProject(project.id);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Project Approved successfully!'), backgroundColor: Colors.green));
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    icon: const Icon(IconsaxPlusLinear.tick_circle, size: 18),
-                    label: const Text('Approve Now', style: TextStyle(fontWeight: FontWeight.bold)),
-                  )
-                ],
-              ),
-            ),
+            _buildApprovalBar(project, isDark),
             const SizedBox(height: 32),
           ],
 
@@ -661,7 +623,7 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
       onPlanSelected: (plan) {
         setState(() {
           _activePlan = plan;
-          _selectedTabIndex = 2;
+          _selectedTabIndex = 3;
         });
       },
     );
@@ -747,6 +709,10 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.watch(authProvider).role)) ...[
+            _buildApprovalBar(project, isDark).animate().fadeIn().slideY(begin: -0.1, end: 0),
+            const SizedBox(height: 24),
+          ],
           // ── HERO: Project Identity Banner ────────────────────────────────
           Container(
             width: double.infinity,
@@ -1566,6 +1532,7 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
                                             'founder_signature': signatureController.text.trim(),
                                             'founder_signature_timestamp': DateTime.now().toIso8601String(),
                                             'confirmed_budget': parsedBudget,
+                                            'is_approved': true,
                                           },
                                         );
                                         Navigator.pop(ctx);
@@ -1594,6 +1561,123 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
     ).then((_) {
       _isAuthDialogOpen = false;
     });
+  }
+
+  Widget _buildApprovalBar(Project project, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark 
+            ? [Colors.amber.withOpacity(0.15), Colors.amber.withOpacity(0.05)]
+            : [Colors.amber.withOpacity(0.1), Colors.amber.withOpacity(0.02)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.amber.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(IconsaxPlusBold.verify, color: Colors.amber, size: 24),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pending Authorization',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.amber[100] : Colors.amber[900],
+                  ),
+                ),
+                Text(
+                  project.managerSignature.isNotEmpty
+                      ? 'This project blueprint has been signed by Manager "${project.managerSignature}" and requires your review to go live.'
+                      : 'This project was created by a Manager and requires your review to go live (Manager signature is currently pending).',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.amber[100]?.withOpacity(0.7) : Colors.amber[800],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Row(
+            children: [
+              TextButton(
+                onPressed: () => _handleApproval(project.id, false),
+                child: Text('Decline', style: TextStyle(color: isDark ? Colors.redAccent[100] : Colors.redAccent)),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                onPressed: () => _showFounderAuthDialog(context, project),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber,
+                  foregroundColor: Colors.black87,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Approve & Go Live', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleApproval(String id, bool approved) async {
+    try {
+      if (!approved) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Reject Project?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            content: const Text(
+              'This project will be marked as rejected. The creator will see it as not approved.',
+              style: TextStyle(color: Colors.white60, height: 1.5),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Reject'),
+              ),
+            ],
+          ),
+        );
+
+        if (confirmed != true) return;
+
+        await ref.read(projectProvider.notifier).rejectProject(id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Project rejected.'), backgroundColor: Colors.orange),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update status: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
   }
 }
 
@@ -2653,6 +2737,41 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
     return canUserApproveTask(task, auth);
   }
 
+  bool _isValidDragTransition(TaskStatus current, TaskStatus target, AuthState auth) {
+    if (current == target) return false;
+    
+    bool isAdjacent = false;
+    if (current == TaskStatus.todo && target == TaskStatus.inProgress) isAdjacent = true;
+    else if (current == TaskStatus.inProgress && (target == TaskStatus.todo || target == TaskStatus.review)) isAdjacent = true;
+    else if (current == TaskStatus.review && (target == TaskStatus.inProgress || target == TaskStatus.done)) isAdjacent = true;
+    else if (current == TaskStatus.done && (target == TaskStatus.review || target == TaskStatus.completed)) isAdjacent = true;
+    else if (current == TaskStatus.completed && target == TaskStatus.done) isAdjacent = true;
+    
+    if (!isAdjacent) return false;
+    
+    final isAdminOrSub = auth.isAdmin || auth.isSubAdmin;
+    
+    if (current == TaskStatus.todo && target == TaskStatus.inProgress) {
+      return isAdminOrSub || auth.isManager;
+    } else if (current == TaskStatus.inProgress && target == TaskStatus.todo) {
+      return isAdminOrSub || auth.isManager;
+    } else if (current == TaskStatus.inProgress && target == TaskStatus.review) {
+      return auth.isManager;
+    } else if (current == TaskStatus.review && target == TaskStatus.inProgress) {
+      return isAdminOrSub;
+    } else if (current == TaskStatus.review && target == TaskStatus.done) {
+      return isAdminOrSub;
+    } else if (current == TaskStatus.done && target == TaskStatus.review) {
+      return auth.isManager;
+    } else if (current == TaskStatus.done && target == TaskStatus.completed) {
+      return auth.isManager;
+    } else if (current == TaskStatus.completed && target == TaskStatus.done) {
+      return isAdminOrSub;
+    }
+    
+    return false;
+  }
+
   void _updateNodeStatus(SystemTask task, TaskStatus newStatus) async {
     await ref.read(taskProvider.notifier).updateTaskStatus(task.id, newStatus);
     
@@ -3390,6 +3509,10 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
           const Divider(height: 1),
           Expanded(
             child: DragTarget<SystemTask>(
+              onWillAcceptWithDetails: (details) {
+                final auth = ref.read(authProvider);
+                return _isValidDragTransition(details.data.status, status, auth);
+              },
               onAcceptWithDetails: (details) {
                 onMove(details.data);
               },

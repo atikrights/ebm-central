@@ -21,24 +21,64 @@ class _TrashedNotifier extends StateNotifier<AsyncValue<List<Project>>> {
   }
 
   Future<void> load() async {
-    state = const AsyncValue.loading();
+    if (state is! AsyncData) {
+      state = const AsyncValue.loading();
+    }
     try {
       final projects = await _ref.read(projectProvider.notifier).fetchTrashedProjects();
-      state = AsyncValue.data(projects);
+      if (mounted) state = AsyncValue.data(projects);
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (state is! AsyncData) {
+        if (mounted) state = AsyncValue.error(e, st);
+      }
     }
   }
 
   Future<bool> restore(String id) async {
-    final ok = await _ref.read(projectProvider.notifier).restoreTrashedProject(id);
-    if (ok) await load();
+    final oldState = state;
+    Project? restoredProject;
+
+    if (state is AsyncData<List<Project>>) {
+      final currentList = state.value!;
+      try {
+        restoredProject = currentList.firstWhere((p) => p.id == id);
+      } catch (_) {}
+      state = AsyncData(currentList.where((p) => p.id != id).toList());
+    }
+
+    final activeNotifier = _ref.read(projectProvider.notifier);
+    final oldActiveState = activeNotifier.state;
+    if (restoredProject != null && oldActiveState is AsyncData<List<Project>>) {
+      final activeList = List<Project>.from(oldActiveState.value!);
+      if (!activeList.any((p) => p.id == id)) {
+        activeList.insert(0, restoredProject.clearDeletedAt());
+        activeNotifier.state = AsyncData(activeList);
+      }
+    }
+
+    final ok = await activeNotifier.restoreTrashedProject(id);
+    if (!ok) {
+      state = oldState;
+      activeNotifier.state = oldActiveState;
+    } else {
+      load();
+    }
     return ok;
   }
 
   Future<bool> forceDelete(String id) async {
+    final oldState = state;
+    if (state is AsyncData<List<Project>>) {
+      final currentList = state.value!;
+      state = AsyncData(currentList.where((p) => p.id != id).toList());
+    }
+
     final ok = await _ref.read(projectProvider.notifier).forceDeleteProject(id);
-    if (ok) await load();
+    if (!ok) {
+      state = oldState;
+    } else {
+      load();
+    }
     return ok;
   }
 }

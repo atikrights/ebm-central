@@ -29,6 +29,16 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   final List<String> _filters = ['All', 'Active', 'Hold', 'Complete', 'Pending'];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.invalidate(trashedCountProvider);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final projectState = ref.watch(projectProvider);
     ref.watch(companyProvider); // Keep company cache hot and reactive
@@ -289,6 +299,8 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   }
 
   Widget _buildHeader(BuildContext context, bool isDark) {
+    final trashedCount = ref.watch(trashedCountProvider).value ?? 0;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -320,7 +332,57 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
           const SizedBox(width: 10),
           _buildActionButton(IconsaxPlusLinear.filter, isDark),
           const SizedBox(width: 6),
-          _buildActionButton(IconsaxPlusLinear.document_text, isDark),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              InkWell(
+                onTap: () => _showRecycleBinDialog(context),
+                borderRadius: BorderRadius.circular(10),
+                child: Tooltip(
+                  message: 'Recycle Bin',
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                    ),
+                    child: Icon(Icons.delete_sweep_rounded, size: 16, color: isDark ? Colors.white : Colors.black),
+                  ),
+                ),
+              ),
+              if (trashedCount > 0)
+                Positioned(
+                  top: -4,
+                  right: -4,
+                  child: IgnorePointer(
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(
+                        color: Colors.redAccent,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Center(
+                        child: Text(
+                          trashedCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -468,6 +530,346 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showRecycleBinDialog(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    List<Project>? trashedProjects;
+    bool isLoadingTrashed = false;
+    String searchQuery = '';
+    final Set<String> loadingIds = {};
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          if (trashedProjects == null && !isLoadingTrashed) {
+            isLoadingTrashed = true;
+            ref.read(projectProvider.notifier).fetchTrashedProjects().then((list) {
+              setDialogState(() {
+                trashedProjects = list;
+                isLoadingTrashed = false;
+              });
+            }).catchError((err) {
+              setDialogState(() {
+                trashedProjects = [];
+                isLoadingTrashed = false;
+              });
+            });
+          }
+
+          return AlertDialog(
+            backgroundColor: Colors.transparent,
+            contentPadding: EdgeInsets.zero,
+            content: Container(
+              width: 500,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF131926) : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isDark ? 0.4 : 0.08),
+                    blurRadius: 32,
+                    offset: const Offset(0, 12),
+                  )
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 18),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Recycle Bin',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                              Text(
+                                'Restore or permanently remove projects',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isDark ? Colors.white38 : Colors.black38,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: Icon(Icons.close, size: 18, color: isDark ? Colors.white54 : Colors.black54),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                    ),
+                    child: TextField(
+                      onChanged: (val) => setDialogState(() => searchQuery = val),
+                      style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 13),
+                      textAlignVertical: TextAlignVertical.center,
+                      decoration: InputDecoration(
+                        hintText: 'Search deleted projects...',
+                        hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 12),
+                        prefixIcon: Icon(IconsaxPlusLinear.search_normal, size: 14, color: isDark ? Colors.white38 : Colors.black38),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 350),
+                    child: Builder(
+                      builder: (context) {
+                        if (trashedProjects == null && isLoadingTrashed) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24),
+                              child: CircularProgressIndicator(color: Colors.redAccent),
+                            ),
+                          );
+                        }
+
+                        final projects = trashedProjects ?? [];
+                        final filtered = projects.where((p) {
+                          final query = searchQuery.toLowerCase();
+                          return p.name.toLowerCase().contains(query) || p.pid.toLowerCase().contains(query);
+                        }).toList();
+
+                        if (filtered.isEmpty) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 40),
+                              child: Column(
+                                children: [
+                                  Icon(Icons.delete_outline_rounded, size: 40, color: isDark ? Colors.white12 : Colors.black12),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No deleted projects found',
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white38 : Colors.black38,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        return ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final project = filtered[index];
+                            final isLoading = loadingIds.contains(project.id);
+
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white.withOpacity(0.02) : Colors.black.withOpacity(0.01),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          project.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: isDark ? Colors.white70 : Colors.black87,
+                                            decoration: TextDecoration.lineThrough,
+                                            decorationColor: Colors.redAccent.withOpacity(0.4),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          project.pid,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: isDark ? Colors.white38 : Colors.black38,
+                                            fontFamily: 'monospace',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        onPressed: isLoading ? null : () async {
+                                          setDialogState(() {
+                                            loadingIds.add(project.id);
+                                            // Optimistically remove from dialog list
+                                            trashedProjects?.removeWhere((p) => p.id == project.id);
+                                          });
+
+                                          // Optimistically add to active projects list
+                                          final activeNotifier = ref.read(projectProvider.notifier);
+                                          final oldActiveState = activeNotifier.state;
+                                          if (oldActiveState is AsyncData<List<Project>>) {
+                                            final activeList = List<Project>.from(oldActiveState.value!);
+                                            if (!activeList.any((p) => p.id == project.id)) {
+                                              activeList.insert(0, project.clearDeletedAt());
+                                              activeNotifier.state = AsyncData(activeList);
+                                            }
+                                          }
+
+                                          final ok = await ref.read(projectProvider.notifier).restoreTrashedProject(project.id);
+                                          
+                                          setDialogState(() {
+                                            loadingIds.remove(project.id);
+                                          });
+
+                                          if (!ok) {
+                                            // Rollback active state
+                                            activeNotifier.state = oldActiveState;
+                                            // Re-fetch trashed projects to sync correctly
+                                            final list = await ref.read(projectProvider.notifier).fetchTrashedProjects();
+                                            setDialogState(() {
+                                              trashedProjects = list;
+                                            });
+                                          }
+
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text(ok ? 'Restored "${project.name}" successfully' : 'Failed to restore project'),
+                                                backgroundColor: ok ? const Color(0xFF10B981) : Colors.redAccent,
+                                                behavior: SnackBarBehavior.floating,
+                                              ),
+                                            );
+                                          }
+                                        },
+                                        icon: const Icon(Icons.restore_rounded, size: 18, color: Color(0xFF10B981)),
+                                        tooltip: 'Restore',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      IconButton(
+                                        onPressed: isLoading ? null : () async {
+                                          final confirmDelete = await showDialog<bool>(
+                                            context: context,
+                                            builder: (confirmCtx) => AlertDialog(
+                                              backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                              title: const Text('Delete Permanently?', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                                              content: Text('Are you sure you want to permanently delete "${project.name}"? This action cannot be undone.'),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.pop(confirmCtx, false),
+                                                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () => Navigator.pop(confirmCtx, true),
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Colors.redAccent,
+                                                    foregroundColor: Colors.white,
+                                                    elevation: 0,
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                  child: const Text('Delete Forever', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+
+                                          if (confirmDelete == true) {
+                                            setDialogState(() {
+                                              loadingIds.add(project.id);
+                                              // Optimistically remove from list
+                                              trashedProjects?.removeWhere((p) => p.id == project.id);
+                                            });
+
+                                            final ok = await ref.read(projectProvider.notifier).forceDeleteProject(project.id);
+                                            
+                                            setDialogState(() {
+                                              loadingIds.remove(project.id);
+                                            });
+
+                                            if (!ok) {
+                                              // Re-fetch trashed projects to sync correctly on failure
+                                              final list = await ref.read(projectProvider.notifier).fetchTrashedProjects();
+                                              setDialogState(() {
+                                                trashedProjects = list;
+                                              });
+                                            }
+
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(ok ? 'Permanently deleted "${project.name}"' : 'Failed to permanently delete project'),
+                                                  backgroundColor: ok ? Colors.orange : Colors.redAccent,
+                                                  behavior: SnackBarBehavior.floating,
+                                                ),
+                                              );
+                                            }
+                                          }
+                                        },
+                                        icon: const Icon(Icons.delete_forever_rounded, size: 18, color: Colors.redAccent),
+                                        tooltip: 'Delete Forever',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                    ],
+                                  )
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -989,7 +1391,15 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
     final statusColor = _getStatusColor(widget.project.status);
     final progress = widget.project.totalBudget > 0 ? (widget.project.consumedBudget / widget.project.totalBudget) : 0.0;
     final w = MediaQuery.sizeOf(context).width;
-    final isMobile = w < 768;
+
+    Widget childLayout;
+    if (w < 768) {
+      childLayout = _buildMobileLayout(statusColor, progress);
+    } else if (w < 1150) {
+      childLayout = _buildTabletLayout(statusColor, progress);
+    } else {
+      childLayout = _buildDesktopLayout(statusColor, progress);
+    }
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -1031,16 +1441,100 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
             borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding: EdgeInsets.symmetric(
-                horizontal: isMobile ? 14 : 16,
-                vertical: isMobile ? 12 : 14,
+                horizontal: w < 768 ? 12 : 16,
+                vertical: w < 768 ? 10 : 14,
               ),
-              child: isMobile 
-                  ? _buildMobileLayout(statusColor, progress)
-                  : _buildDesktopLayout(statusColor, progress),
+              child: childLayout,
             ),
           ),
         ),
       ),
+    );
+  }
+
+  void _showMoveToRecycleBinDialog(BuildContext context, Project project) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.transparent,
+        contentPadding: EdgeInsets.zero,
+        content: Container(
+          width: 340,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 30)],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.delete_outline_rounded, size: 32, color: Colors.redAccent),
+              ),
+              const SizedBox(height: 16),
+              const Text('Move to Recycle Bin?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(
+                'This will soft-delete "${project.name}". You can restore it later from the Recycle Bin.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: isDark ? Colors.white38 : Colors.black54),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text('Cancel', style: TextStyle(color: isDark ? Colors.white38 : Colors.black38)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        try {
+                          await ref.read(projectProvider.notifier).deleteProject(project.id);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('"${project.name}" moved to Recycle Bin'),
+                                backgroundColor: Colors.redAccent,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error: ${e.toString()}'),
+                                backgroundColor: Colors.red,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Move to Bin', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ).animate().scale(curve: Curves.easeOutBack, duration: 400.ms).fadeIn(),
     );
   }
 
@@ -1167,12 +1661,16 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
                           color: widget.isDark ? Colors.white38 : Colors.black38,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          _formatLastUpdated(widget.project),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: widget.isDark ? Colors.white38 : Colors.black38,
-                            fontWeight: FontWeight.w500,
+                        Expanded(
+                          child: Text(
+                            _formatLastUpdated(widget.project),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: widget.isDark ? Colors.white38 : Colors.black38,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],
@@ -1226,7 +1724,10 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
           flex: 3,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _buildCompanyInfo(),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _buildCompanyInfo(),
+            ),
           ),
         ),
         Expanded(
@@ -1243,11 +1744,147 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
         Padding(
           padding: const EdgeInsets.only(left: 16),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                onPressed: () => _showDraftDialog(context, widget.project),
-                icon: Icon(IconsaxPlusLinear.document_favorite, size: 18, color: widget.isDark ? Colors.white38 : Colors.black38),
-                tooltip: 'Move to Draft',
+                onPressed: () => _showMoveToRecycleBinDialog(context, widget.project),
+                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                tooltip: 'Move to Recycle Bin',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 12),
+              if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role?.toLowerCase()))
+                IconButton(
+                  onPressed: () {
+                    ref.read(projectProvider.notifier).approveProject(widget.project.id);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Project Approved'), backgroundColor: Colors.green));
+                  },
+                  icon: const Icon(IconsaxPlusLinear.tick_circle, size: 18, color: Colors.green),
+                  tooltip: 'Approve Project',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role?.toLowerCase()))
+                const SizedBox(width: 12),
+              IconButton(
+                onPressed: () => GoRouter.of(context).pushNamed('project_manage', pathParameters: {'id': widget.project.id}),
+                icon: Icon(IconsaxPlusLinear.eye, size: 18, color: widget.isDark ? Colors.white38 : Colors.black38),
+                tooltip: 'Visit Project',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 12),
+              IconButton(
+                icon: Icon(IconsaxPlusLinear.arrow_right_3, size: 18, color: widget.isDark ? Colors.white24 : Colors.black26),
+                onPressed: () => GoRouter.of(context).pushNamed('project_manage', pathParameters: {'id': widget.project.id}),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabletLayout(Color statusColor, double progress) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 5,
+          child: Row(
+            children: [
+              _buildProjectIcon(),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.project.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14, 
+                              fontWeight: FontWeight.w800, 
+                              color: widget.isDark ? Colors.white.withOpacity(0.95) : AppColors.lightText, 
+                              letterSpacing: -0.4,
+                            ),
+                          ),
+                        ),
+                        if (widget.project.status == ProjectStatus.draft)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(color: Colors.orangeAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                              child: const Icon(IconsaxPlusBold.edit_2, size: 8, color: Colors.orangeAccent),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    _buildPidCopy(),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Icon(
+                          IconsaxPlusLinear.clock,
+                          size: 10,
+                          color: widget.isDark ? Colors.white38 : Colors.black38,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            _formatLastUpdated(widget.project),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              color: widget.isDark ? Colors.white38 : Colors.black38,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          flex: 3,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _buildCompanyInfo(),
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 2,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: _statusBadge(widget.project.status, statusColor),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: () => _showMoveToRecycleBinDialog(context, widget.project),
+                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                tooltip: 'Move to Recycle Bin',
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
@@ -1287,144 +1924,88 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
   }
 
   Widget _buildMobileLayout(Color statusColor, double progress) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Row(
+        _buildMiniProjectIcon(),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
                 children: [
-                  _buildProjectIcon(),
-                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      widget.project.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13.5, 
+                        fontWeight: FontWeight.w800, 
+                        color: widget.isDark ? Colors.white.withOpacity(0.95) : AppColors.lightText, 
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ),
+                  if (widget.project.status == ProjectStatus.draft)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(color: Colors.orangeAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(3)),
+                        child: const Icon(IconsaxPlusBold.edit_2, size: 8, color: Colors.orangeAccent),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              _buildPidCopy(),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Icon(
+                    IconsaxPlusLinear.clock,
+                    size: 9,
+                    color: widget.isDark ? Colors.white38 : Colors.black38,
+                  ),
+                  const SizedBox(width: 3),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.project.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 15, 
-                            fontWeight: FontWeight.w800, 
-                            color: widget.isDark ? Colors.white.withOpacity(0.95) : AppColors.lightText,
-                            letterSpacing: -0.4,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        _buildPidCopy(),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              IconsaxPlusLinear.clock,
-                              size: 10,
-                              color: widget.isDark ? Colors.white38 : Colors.black38,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _formatLastUpdated(widget.project),
-                              style: TextStyle(
-                                fontSize: 9,
-                                color: widget.isDark ? Colors.white38 : Colors.black38,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                    child: Text(
+                      _formatLastUpdated(widget.project),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: widget.isDark ? Colors.white38 : Colors.black38,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
-            _statusBadge(widget.project.status, statusColor),
-          ],
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(width: 8),
+        _statusBadge(widget.project.status, statusColor),
+        const SizedBox(width: 8),
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('BUDGET', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1, color: widget.isDark ? Colors.white38 : AppColors.lightTextMuted)),
-                      Text('\$${NumberFormat.compact().format(widget.project.consumedBudget)} / \$${NumberFormat.compact().format(widget.project.totalBudget)}', 
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: widget.isDark ? Colors.white70 : AppColors.lightText)),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: (widget.project.id.hashCode % 100) / 100,
-                      minHeight: 3,
-                      backgroundColor: widget.isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
-                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 3,
-                      backgroundColor: widget.isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
-                      valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-                    ),
-                  ),
-                ],
-              ),
+            IconButton(
+              onPressed: () => _showMoveToRecycleBinDialog(context, widget.project),
+              icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
+              tooltip: 'Move to Recycle Bin',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildCompanyInfo(),
-            Row(
-              children: [
-                _buildTeamStack(),
-                const SizedBox(width: 12),
-                IconButton(
-                  onPressed: () => _showDraftDialog(context, widget.project),
-                  icon: Icon(IconsaxPlusLinear.document_favorite, size: 18, color: widget.isDark ? Colors.white38 : Colors.black38),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-                const SizedBox(width: 8),
-                 if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role?.toLowerCase()))
-                  IconButton(
-                    onPressed: () {
-                      ref.read(projectProvider.notifier).approveProject(widget.project.id);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Project Approved'), backgroundColor: Colors.green));
-                    },
-                    icon: const Icon(IconsaxPlusLinear.tick_circle, size: 18, color: Colors.green),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                 if (!widget.project.isApproved && ['admin', 'sub_admin', 'super_admin'].contains(ref.read(authProvider).role?.toLowerCase()))
-                  const SizedBox(width: 8),
-                 IconButton(
-                  onPressed: () => GoRouter.of(context).pushNamed('project_manage', pathParameters: {'id': widget.project.id}),
-                  icon: Icon(IconsaxPlusLinear.eye, size: 18, color: widget.isDark ? Colors.white38 : Colors.black38),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () => GoRouter.of(context).pushNamed('project_manage', pathParameters: {'id': widget.project.id}),
-                  icon: Icon(IconsaxPlusLinear.arrow_right_3, size: 18, color: widget.isDark ? Colors.white38 : Colors.black38),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
+            const SizedBox(width: 8),
+            IconButton(
+              icon: Icon(IconsaxPlusLinear.arrow_right_3, size: 16, color: widget.isDark ? Colors.white24 : Colors.black26),
+              onPressed: () => GoRouter.of(context).pushNamed('project_manage', pathParameters: {'id': widget.project.id}),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
           ],
         ),
@@ -1447,6 +2028,21 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
     );
   }
 
+  Widget _buildMiniProjectIcon() {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: widget.project.brandColor.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: widget.project.brandColor.withOpacity(0.3)),
+      ),
+      child: Center(
+        child: Icon(IconsaxPlusBold.folder_2, color: widget.project.brandColor, size: 18),
+      ),
+    );
+  }
+
   Widget _buildPidCopy() {
     return InkWell(
       onTap: () {
@@ -1464,13 +2060,17 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            widget.project.pid,
-            style: TextStyle(
-              fontSize: 11, 
-              color: widget.project.brandColor, 
-              fontWeight: FontWeight.w700,
-              fontFamily: 'monospace',
+          Flexible(
+            child: Text(
+              widget.project.pid,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11, 
+                color: widget.project.brandColor, 
+                fontWeight: FontWeight.w700,
+                fontFamily: 'monospace',
+              ),
             ),
           ),
           const SizedBox(width: 4),
@@ -1513,7 +2113,14 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
             children: [
               Icon(IconsaxPlusLinear.lock, size: 12, color: Colors.redAccent),
               SizedBox(width: 6),
-              Text('Own Scope', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.w900)),
+              Flexible(
+                child: Text(
+                  'Own Scope',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.w900),
+                ),
+              ),
             ],
           ),
         ),
@@ -1589,18 +2196,18 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
   Widget _statusBadge(ProjectStatus status, Color color) {
     if (!widget.project.isApproved) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         decoration: BoxDecoration(
           color: Colors.orangeAccent.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.orangeAccent.withOpacity(0.3)),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(IconsaxPlusBold.timer_1, size: 12, color: Colors.orangeAccent),
-            SizedBox(width: 4),
-            Text('PENDING', style: TextStyle(color: Colors.orangeAccent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+            Icon(IconsaxPlusBold.timer_1, size: 9, color: Colors.orangeAccent),
+            SizedBox(width: 3),
+            Text('PENDING', style: TextStyle(color: Colors.orangeAccent, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
           ],
         ),
       );
@@ -1615,18 +2222,18 @@ class _ProjectListItemState extends ConsumerState<_ProjectListItem> {
       case ProjectStatus.draft: icon = IconsaxPlusBold.edit; break;
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(status.name.toUpperCase(), style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+          Icon(icon, size: 9, color: color),
+          const SizedBox(width: 3),
+          Text(status.name.toUpperCase(), style: TextStyle(color: color, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
         ],
       ),
     );

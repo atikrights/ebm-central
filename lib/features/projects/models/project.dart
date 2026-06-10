@@ -103,6 +103,39 @@ class Project {
     );
   }
 
+  Project clearDeletedAt() {
+    return Project(
+      id: id,
+      companyId: companyId,
+      companyName: companyName,
+      pid: pid,
+      name: name,
+      category: category,
+      description: description,
+      status: status,
+      totalBudget: totalBudget,
+      consumedBudget: consumedBudget,
+      startDate: startDate,
+      brandColor: brandColor,
+      taskIds: taskIds,
+      plans: plans,
+      isApproved: isApproved,
+      minBudget: minBudget,
+      maxBudget: maxBudget,
+      managerSignature: managerSignature,
+      managerSignatureTimestamp: managerSignatureTimestamp,
+      founderSignature: founderSignature,
+      founderSignatureTimestamp: founderSignatureTimestamp,
+      confirmedBudget: confirmedBudget,
+      website: website,
+      coverPhotoUrl: coverPhotoUrl,
+      inspirationText: inspirationText,
+      deletedAt: null,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
+  }
+
   static bool _parseBool(dynamic val) {
     if (val == null) return true;
     if (val is bool) return val;

@@ -3,16 +3,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_service.dart';
 import '../models/project.dart';
 
+final trashedCountProvider = FutureProvider<int>((ref) async {
+  final api = ref.watch(apiServiceProvider);
+  try {
+    final response = await api.get('/projects/trashed');
+    if (response != null) {
+      final List dataList = response is List ? response
+          : (response is Map && response['data'] is List ? response['data'] : []);
+      return dataList.length;
+    }
+  } catch (_) {}
+  return 0;
+});
+
 final projectProvider = StateNotifierProvider<ProjectNotifier, AsyncValue<List<Project>>>((ref) {
   final api = ref.watch(apiServiceProvider);
-  return ProjectNotifier(api);
+  return ProjectNotifier(api, ref);
 });
 
 class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
   final ApiService _api;
+  final Ref _ref;
   Timer? _timer;
 
-  ProjectNotifier(this._api) : super(const AsyncValue.loading()) {
+  ProjectNotifier(this._api, this._ref) : super(const AsyncValue.loading()) {
     fetchProjects();
     _timer = Timer.periodic(const Duration(seconds: 10), (_) => _backgroundFetch());
   }
@@ -46,6 +60,7 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
       } else {
         if (mounted) state = const AsyncValue.data([]);
       }
+      _ref.invalidate(trashedCountProvider);
     } catch (e, st) {
       // On error: only update state if we don't already have data (preserve stale cache)
       if (state is! AsyncData) {
@@ -78,7 +93,9 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
       if (response != null) {
         final List dataList = response is List ? response
             : (response is Map && response['data'] is List ? response['data'] : []);
-        return dataList.map((p) => Project.fromMap(p as Map<String, dynamic>)).toList();
+        final list = dataList.map((p) => Project.fromMap(p as Map<String, dynamic>)).toList();
+        _ref.invalidate(trashedCountProvider);
+        return list;
       }
     } catch (_) {}
     return [];
@@ -101,6 +118,7 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
     try {
       final response = await _api.delete('/projects/$projectId/force-delete');
       if (response != null) {
+        _ref.invalidate(trashedCountProvider);
         return true;
       }
     } catch (_) {}
@@ -124,6 +142,7 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
           state = AsyncValue.data(projects);
         }
       }
+      _ref.invalidate(trashedCountProvider);
     } catch (_) {}
   }
 
@@ -276,10 +295,19 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
   }
 
   Future<void> deleteProject(String projectId) async {
+    final oldState = state;
+    if (state is AsyncData<List<Project>>) {
+      final currentList = state.value!;
+      state = AsyncData(currentList.where((p) => p.id != projectId).toList());
+    }
+
     try {
       await _api.delete('/projects/$projectId');
-      await fetchProjects();
-    } catch (e) { rethrow; }
+      _backgroundFetch();
+    } catch (e) {
+      state = oldState;
+      rethrow;
+    }
   }
 
   /// Search a project by its unique PID securely
