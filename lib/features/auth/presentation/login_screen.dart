@@ -146,19 +146,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ),
             ),
           ),
-          if (kDebugMode)
-            Positioned(
-              bottom: 24,
-              right: 24,
-              child: FloatingActionButton(
-                key: const ValueKey('dev_auto_login_btn'),
-                mini: true,
-                backgroundColor: const Color(0xFF6366F1),
-                foregroundColor: Colors.white,
-                child: const Icon(Icons.developer_mode_rounded),
-                onPressed: () => _showDevAutoLoginSheet(context),
-              ),
+          Positioned(
+            bottom: 24,
+            right: 24,
+            child: FloatingActionButton(
+              key: const ValueKey('dev_auto_login_btn'),
+              mini: true,
+              backgroundColor: const Color(0xFF6366F1),
+              foregroundColor: Colors.white,
+              child: const Icon(Icons.developer_mode_rounded),
+              onPressed: () => _showDevAutoLoginSheet(context),
             ),
+          ),
         ],
       ),
     );
