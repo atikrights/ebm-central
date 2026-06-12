@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'chat_service.dart';
 import 'websocket_service.dart';
+import 'package:frontend/core/auth/auth_provider.dart';
 
 final unreadChatCountProvider = StateNotifierProvider<UnreadChatCountNotifier, int>((ref) {
   return UnreadChatCountNotifier(ref);
@@ -36,6 +37,8 @@ class UnreadChatCountNotifier extends StateNotifier<int> {
   }
 
   Future<void> refreshCount() async {
+    final auth = ref.read(authProvider);
+    if (!auth.isLoggedIn || auth.token == null) return;
     try {
       final conversations = await ref.read(chatServiceProvider).getConversations();
       int total = 0;

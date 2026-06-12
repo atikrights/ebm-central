@@ -33,11 +33,13 @@ class TaskProvider extends ChangeNotifier {
 
   // Sync method using real API
   Future<void> syncWithDatabase({String? projectId, String? planId, String? companyId}) async {
+    final api = _ref.read(apiServiceProvider);
+    if (api.token == null) return;
+
     _isLoading = true;
     notifyListeners();
 
     try {
-      final api = _ref.read(apiServiceProvider);
       String endpoint = '/tasks';
       final params = <String>[];
       if (companyId != null) params.add('company_id=$companyId');

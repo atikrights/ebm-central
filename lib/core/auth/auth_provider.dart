@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
@@ -164,62 +165,69 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> _restoreSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    // SECURE: On Web, only force login with password for SUPER_ADMIN role.
-    // Allow persistent sessions for regular administrative roles (Admin, Sub-Admin) so they don't have to re-login.
-    if (kIsWeb) {
-      final cachedRole = prefs.getString('user_role');
-      if (cachedRole?.toUpperCase() == 'SUPER_ADMIN') {
-        state = state.copyWith(isInitializing: false, isLoggedIn: false);
-        return;
-      }
-    }
-    final deviceId = prefs.getString('ebm_secure_device_id') ?? '';
-    
-    // Attempt to read encrypted token. If not present, fall back to plain token (migration)
-    String? token = await SecureLocalStore.readDecrypted('auth_token', deviceId);
-    if (token == null) {
-      token = prefs.getString('auth_token');
-      if (token != null && deviceId.isNotEmpty) {
-        await SecureLocalStore.saveEncrypted('auth_token', token, deviceId);
-        await prefs.remove('auth_token'); // clean up legacy unencrypted key
-      }
-    }
-    
-    final userId = prefs.getInt('user_id');
-    final role = prefs.getString('user_role');
-    final name = prefs.getString('user_name');
-    final email = prefs.getString('user_email');
-    final chatProfileId = prefs.getString('chat_profile_id');
-    final chatNumber = prefs.getString('chat_number');
-    final chatNickname = prefs.getString('chat_nickname');
-    final chatBio = prefs.getString('chat_bio');
-    final chatAbout = prefs.getString('chat_about');
-
-    if (token != null && role != null) {
-      final api = ref.read(apiServiceProvider);
-      api.setToken(token);
+    try {
+      final prefs = await SharedPreferences.getInstance();
       
-      state = AuthState(
-        isLoggedIn: true,
-        userId: userId,
-        token: token,
-        name: name,
-        email: email,
-        role: role,
-        chatProfileId: chatProfileId,
-        chatNumber: chatNumber,
-        chatNickname: chatNickname,
-        chatBio: chatBio,
-        chatAbout: chatAbout,
-        isInitializing: false,
-      );
+      // SECURE: On Web, only force login with password for SUPER_ADMIN role.
+      // Allow persistent sessions for regular administrative roles (Admin, Sub-Admin) so they don't have to re-login.
+      if (kIsWeb) {
+        final cachedRole = prefs.getString('user_role');
+        if (cachedRole?.toUpperCase() == 'SUPER_ADMIN') {
+          state = state.copyWith(isInitializing: false, isLoggedIn: false);
+          return;
+        }
+      }
+      final deviceId = prefs.getString('ebm_secure_device_id') ?? '';
+      
+      // Attempt to read encrypted token. If not present, fall back to plain token (migration)
+      String? token = await SecureLocalStore.readDecrypted('auth_token', deviceId);
+      if (token == null) {
+        token = prefs.getString('auth_token');
+        if (token != null && deviceId.isNotEmpty) {
+          await SecureLocalStore.saveEncrypted('auth_token', token, deviceId);
+          await prefs.remove('auth_token'); // clean up legacy unencrypted key
+        }
+      }
+      
+      final userId = prefs.getInt('user_id');
+      final role = prefs.getString('user_role');
+      final name = prefs.getString('user_name');
+      final email = prefs.getString('user_email');
+      final chatProfileId = prefs.getString('chat_profile_id');
+      final chatNumber = prefs.getString('chat_number');
+      final chatNickname = prefs.getString('chat_nickname');
+      final chatBio = prefs.getString('chat_bio');
+      final chatAbout = prefs.getString('chat_about');
 
-      // Trigger background session verification asynchronously to keep details in sync
-      _verifySessionAsync(token, role, name, email, userId);
-    } else {
-      // If no token exists, still set isInitializing to false so router goes to login
+      if (token != null && role != null) {
+        final api = ref.read(apiServiceProvider);
+        api.setToken(token);
+        
+        state = AuthState(
+          isLoggedIn: true,
+          userId: userId,
+          token: token,
+          name: name,
+          email: email,
+          role: role,
+          chatProfileId: chatProfileId,
+          chatNumber: chatNumber,
+          chatNickname: chatNickname,
+          chatBio: chatBio,
+          chatAbout: chatAbout,
+          isInitializing: false,
+        );
+
+        // Trigger background session verification asynchronously to keep details in sync
+        _verifySessionAsync(token, role, name, email, userId);
+      } else {
+        // If no token exists, still set isInitializing to false so router goes to login
+        state = state.copyWith(isInitializing: false, isLoggedIn: false);
+      }
+    } catch (e, stack) {
+      debugPrint("Error restoring session: $e");
+      debugPrint("Stack trace: $stack");
+      // Log to debug console instead of writing files in production
       state = state.copyWith(isInitializing: false, isLoggedIn: false);
     }
   }

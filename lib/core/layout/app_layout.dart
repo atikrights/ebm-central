@@ -48,6 +48,8 @@ import '../../features/governance/presentation/authority_matrix_screen.dart';
 import '../../features/security/presentation/chat_governance_screen.dart';
 import '../../features/settings/presentation/update_screen.dart';
 import '../../features/notices/presentation/notice_screen.dart';
+import '../../features/brief/presentation/brief_roadmap_screen.dart';
+import '../../features/brief/presentation/brief_central_screen.dart';
 import 'dart:async';
 import '../../features/chat/data/unread_chat_count_provider.dart';
 
@@ -185,6 +187,8 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     const UpdateScreen(), // Index 47: System Update
     const ChatGovernanceScreen(), // Index 48: Chat Monitoring & Governance
     const NoticeScreen(), // Index 49: Notices
+    const BriefRoadmapScreen(), // Index 50: Brief -> Roadmap
+    const BriefCentralScreen(), // Index 51: Brief -> Central
   ];
 
   static const Map<int, String> _indexToPath = {
@@ -206,6 +210,8 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     47: '/update',
     48: '/chat-governance',
     49: '/notices',
+    50: '/brief/roadmap',
+    51: '/brief/central',
   };
 
   void _onNavTap(int index) {
@@ -671,6 +677,18 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                       _SubMenuItem(index: 36, label: 'Companies', icon: Icons.store_rounded),
                       _SubMenuItem(index: 37, label: 'Projects', icon: Icons.assignment_rounded),
                       _SubMenuItem(index: 38, label: 'Tasks', icon: Icons.task_alt_rounded),
+                    ],
+                  ),
+                  _buildExpandableSidebarItem(
+                    index: 50,
+                    icon: Icons.description_rounded,
+                    label: 'Brief',
+                    isExpanded: isExpanded,
+                    isDark: isDark,
+                    subItems: [
+                      _SubMenuItem(index: 50, label: 'Roadmap', icon: Icons.route_rounded),
+                      _SubMenuItem(index: 49, label: 'Notice', icon: Icons.notifications_rounded),
+                      _SubMenuItem(index: 51, label: 'Central', icon: Icons.hub_rounded),
                     ],
                   ),
                   _buildExpandableSidebarItem(

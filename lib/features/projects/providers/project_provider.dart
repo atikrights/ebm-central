@@ -38,6 +38,7 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
   }
 
   Future<void> fetchProjects({bool showLoading = false}) async {
+    if (_api.token == null) return;
     try {
       // Only show loading spinner on first load (no existing data).
       // Background refreshes must be completely silent to prevent layout flicker.
@@ -126,6 +127,7 @@ class ProjectNotifier extends StateNotifier<AsyncValue<List<Project>>> {
   }
 
   Future<void> _backgroundFetch() async {
+    if (_api.token == null) return;
     try {
       final response = await _api.get('/projects');
       if (response != null) {

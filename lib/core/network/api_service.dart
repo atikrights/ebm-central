@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -141,7 +142,17 @@ class ApiService {
   // ─── Response Handler ─────────────────────────────────────────────────────
   dynamic _handleResponse(http.Response response) {
     final statusCode = response.statusCode;
-    final body = response.body;
+    String body;
+    try {
+      body = response.body;
+      // No file logging in production
+    } catch (e) {
+      debugPrint('❌ Response Body Decode Error: $e');
+      throw ApiException(
+        'Decryption or encoding mismatch: invalid response bytes.',
+        statusCode: statusCode,
+      );
+    }
 
     if (statusCode >= 200 && statusCode < 300) {
       if (body.isEmpty) return null;

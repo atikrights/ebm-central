@@ -146,6 +146,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ),
             ),
           ),
+          if (kDebugMode)
+            Positioned(
+              bottom: 24,
+              right: 24,
+              child: FloatingActionButton(
+                key: const ValueKey('dev_auto_login_btn'),
+                mini: true,
+                backgroundColor: const Color(0xFF6366F1),
+                foregroundColor: Colors.white,
+                child: const Icon(Icons.developer_mode_rounded),
+                onPressed: () => _showDevAutoLoginSheet(context),
+              ),
+            ),
         ],
       ),
     );
@@ -443,6 +456,164 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
         ),
       ],
+    );
+  }
+
+  void _showDevAutoLoginSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF111827) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(
+              color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+              width: 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6366F1).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.developer_mode_rounded, color: Color(0xFF6366F1), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Developer Auto-Login',
+                    style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildDevRoleButton(
+                context: context,
+                isDark: isDark,
+                roleName: 'Admin',
+                email: 'admin@ebfic.dev',
+                password: 'password',
+                icon: Icons.security_rounded,
+                color: const Color(0xFF3B82F6),
+              ),
+              const SizedBox(height: 12),
+              _buildDevRoleButton(
+                context: context,
+                isDark: isDark,
+                roleName: 'Sub-Admin',
+                email: 'subadmin@ebfic.dev',
+                password: 'password',
+                icon: Icons.shield_outlined,
+                color: const Color(0xFF10B981),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Note: This overlay is only visible during development (kDebugMode).',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDevRoleButton({
+    required BuildContext context,
+    required bool isDark,
+    required String roleName,
+    required String email,
+    required String password,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.pop(context);
+            setState(() {
+              _emailController.text = email;
+              _passwordController.text = password;
+            });
+            _handleLogin();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            key: ValueKey('dev_login_$roleName'),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        roleName,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        email,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: isDark ? Colors.white54 : Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: isDark ? Colors.white30 : Colors.black38,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

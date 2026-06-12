@@ -149,6 +149,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
 
           GoRoute(
+            path: '/brief/roadmap',
+            name: 'brief_roadmap',
+            builder: (context, state) => const AppLayout(initialIndex: 50),
+          ),
+
+          GoRoute(
+            path: '/brief/central',
+            name: 'brief_central',
+            builder: (context, state) => const AppLayout(initialIndex: 51),
+          ),
+
+          GoRoute(
             path: '/team',
             name: 'team',
             builder: (context, state) => const AppLayout(initialIndex: 33),
