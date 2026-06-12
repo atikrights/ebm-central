@@ -187,7 +187,7 @@ class ApiService {
           ref.read(authProvider.notifier).logout();
         });
       }
-      throw ApiException('Unauthorized. Please log in again.', statusCode: 401);
+      throw ApiException(message.contains('Request failed') ? 'Unauthorized. Please log in again.' : message, statusCode: 401);
     }
     if (statusCode == 403) throw ApiException('Access denied: $message', statusCode: 403);
     if (statusCode == 422) throw ApiException('Validation error: $message', statusCode: 422);
