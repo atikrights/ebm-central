@@ -2,18 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:frontend/core/network/api_service.dart';
 import 'package:iconsax_plus/iconsax_plus.dart';
+import 'package:frontend/features/workplace/providers/company_provider.dart';
+import 'package:frontend/features/projects/providers/project_provider.dart';
 
+// Only Companies and Projects require admin approval.
+// Tasks and Plans are always auto-approved on creation — no approval gate needed.
 class PendingItems {
+  final List<dynamic> companies;
   final List<dynamic> projects;
-  final List<dynamic> tasks;
   final int total;
 
-  PendingItems({required this.projects, required this.tasks, required this.total});
+  PendingItems({required this.companies, required this.projects, required this.total});
 
   factory PendingItems.fromJson(Map<String, dynamic> json) {
     return PendingItems(
+      companies: json['companies'] ?? [],
       projects: json['projects'] ?? [],
-      tasks: json['tasks'] ?? [],
       total: json['total_pending'] ?? 0,
     );
   }
@@ -52,6 +56,8 @@ class ApprovalCenterScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   const Text("All Clear!", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const Text("No pending approvals from your team.", style: TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  const Text("Tasks & Plans are always live instantly.", style: TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
             );
@@ -60,16 +66,16 @@ class ApprovalCenterScreen extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
+              if (data.companies.isNotEmpty) ...[
+                _buildSectionHeader("PENDING COMPANIES", IconsaxPlusLinear.building_3),
+                const SizedBox(height: 12),
+                ...data.companies.map((c) => _buildApprovalCard(context, ref, c, 'company')),
+                const SizedBox(height: 32),
+              ],
               if (data.projects.isNotEmpty) ...[
                 _buildSectionHeader("PENDING PROJECTS", IconsaxPlusLinear.element_3),
                 const SizedBox(height: 12),
                 ...data.projects.map((p) => _buildApprovalCard(context, ref, p, 'project')),
-                const SizedBox(height: 32),
-              ],
-              if (data.tasks.isNotEmpty) ...[
-                _buildSectionHeader("PENDING TASKS", IconsaxPlusLinear.task_square),
-                const SizedBox(height: 12),
-                ...data.tasks.map((t) => _buildApprovalCard(context, ref, t, 'task')),
               ],
             ],
           );
@@ -132,10 +138,19 @@ class ApprovalCenterScreen extends ConsumerWidget {
         'type': type,
         'id': id,
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${type.toUpperCase()} approved successfully!")));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${type.toUpperCase()} approved successfully!")));
+      }
       ref.invalidate(pendingApprovalsProvider);
+      if (type == 'company') {
+        ref.read(companyProvider.notifier).syncWithDatabase();
+      } else if (type == 'project') {
+        ref.read(projectProvider.notifier).fetchProjects();
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+      }
     }
   }
 }

@@ -14,6 +14,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/auth/auth_provider.dart';
 import 'package:flutter/services.dart';
+import '../../../core/config/app_config.dart';
 import '../../../shared/widgets/window_title_bar.dart';
 import '../../../shared/widgets/ebm_image.dart';
 import '../../../shared/widgets/glass_container.dart';
@@ -107,6 +108,37 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
   void initState() {
     super.initState();
     _initControllers();
+    final savedTab = AppConfig.prefs?.getInt('company_tab_${widget.companyId}');
+    if (savedTab != null) {
+      _selectedTabIndex = savedTab;
+    }
+    final savedSettingsTab = AppConfig.prefs?.getInt('company_settings_tab_${widget.companyId}');
+    if (savedSettingsTab != null) {
+      _settingsTabIndex = savedSettingsTab;
+    }
+  }
+
+  void _saveSelectedTab(int index) {
+    AppConfig.prefs?.setInt('company_tab_${widget.companyId}', index);
+  }
+
+  void _saveSettingsTab(int index) {
+    AppConfig.prefs?.setInt('company_settings_tab_${widget.companyId}', index);
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    final oldTab = _selectedTabIndex;
+    final oldSettingsTab = _settingsTabIndex;
+    if (mounted) {
+      super.setState(fn);
+      if (_selectedTabIndex != oldTab) {
+        _saveSelectedTab(_selectedTabIndex);
+      }
+      if (_settingsTabIndex != oldSettingsTab) {
+        _saveSettingsTab(_settingsTabIndex);
+      }
+    }
   }
 
   void _initControllers() {
@@ -364,29 +396,29 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
   @override
   Widget build(BuildContext context) {
     final asyncState = ref.watch(companyProvider);
-    final company = asyncState.maybeWhen(
-      data: (state) => state.companies.firstWhere(
-        (c) => c.id == widget.companyId,
-        orElse: () => Company(
-          id: 'N/A',
-          name: 'Not Found',
-          categories: [],
-          website: '',
-          primaryEmail: '',
-          phone: '',
-          location: '',
-        ),
-      ),
-      orElse: () => Company(
-        id: 'N/A',
-        name: 'Not Found',
-        categories: [],
-        website: '',
-        primaryEmail: '',
-        phone: '',
-        location: '',
-      ),
-    );
+    final currentState = asyncState.value;
+    final company = currentState != null
+        ? currentState.companies.firstWhere(
+            (c) => c.id == widget.companyId,
+            orElse: () => Company(
+              id: 'N/A',
+              name: 'Not Found',
+              categories: [],
+              website: '',
+              primaryEmail: '',
+              phone: '',
+              location: '',
+            ),
+          )
+        : Company(
+            id: 'N/A',
+            name: 'Not Found',
+            categories: [],
+            website: '',
+            primaryEmail: '',
+            phone: '',
+            location: '',
+          );
 
     // ── FOUNDER AUTHORIZATION LOGIC ──────────────────────────────────────────
     // Automatically trigger authorization dialog if manager has signed but founder hasn't
@@ -5041,76 +5073,79 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
 
   Widget _buildProjectHubTab(Company company, bool isDark) {
     final projectsState = ref.watch(projectProvider);
+    final allProjects = projectsState.value;
 
-    return projectsState.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error loading projects: $e')),
-      data: (allProjects) {
-        final companyProjects = allProjects.where((p) => p.companyId == company.id).toList();
+    if (allProjects == null) {
+      return projectsState.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error loading projects: $e')),
+        data: (_) => const SizedBox.shrink(),
+      );
+    }
 
-        return Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final companyProjects = allProjects.where((p) => p.companyId == company.id).toList();
+
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Project Hub',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : Colors.black,
-                        ),
-                      ),
-                      Text(
-                        'Strategic deployments for ${company.name}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: isDark ? Colors.white54 : Colors.black54,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    'Project Hub',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black,
+                    ),
                   ),
-                  ElevatedButton.icon(
-                    onPressed: () => _showCreateProjectDialog(company, isDark),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Deploy Project'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  Text(
+                    'Strategic deployments for ${company.name}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark ? Colors.white54 : Colors.black54,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
-              if (companyProjects.isEmpty)
-                _buildEmptyState(
-                  'No Projects Deployed',
-                  'Initialize your first strategic registry to start tracking goals and progress.',
-                  IconsaxPlusLinear.folder_add,
-                  isDark,
-                )
-              else
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: companyProjects.length,
-                    itemBuilder: (context, index) {
-                      final project = companyProjects[index];
-                      return _buildProjectCard(project, isDark);
-                    },
-                  ),
+              ElevatedButton.icon(
+                onPressed: () => _showCreateProjectDialog(company, isDark),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Deploy Project'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
+              ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 32),
+          if (companyProjects.isEmpty)
+            _buildEmptyState(
+              'No Projects Deployed',
+              'Initialize your first strategic registry to start tracking goals and progress.',
+              IconsaxPlusLinear.folder_add,
+              isDark,
+            )
+          else
+            Expanded(
+              child: ListView.builder(
+                itemCount: companyProjects.length,
+                itemBuilder: (context, index) {
+                  final project = companyProjects[index];
+                  return _buildProjectCard(project, isDark);
+                },
+              ),
+            ),
+        ],
+      ),
     );
   }
 

@@ -18,6 +18,7 @@ import '../../../core/theme/theme_provider.dart';
 import '../models/project.dart';
 import '../providers/project_provider.dart';
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/config/app_config.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../tasks/providers/task_provider.dart';
 import '../../tasks/models/system_task.dart';
@@ -50,89 +51,111 @@ class _SingleProjectManageScreenState extends ConsumerState<SingleProjectManageS
 
 
   @override
+  void initState() {
+    super.initState();
+    final savedTab = AppConfig.prefs?.getInt('project_tab_${widget.projectId}');
+    if (savedTab != null) {
+      _selectedTabIndex = savedTab;
+    }
+  }
+
+  void _saveSelectedTab(int index) {
+    AppConfig.prefs?.setInt('project_tab_${widget.projectId}', index);
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    final oldTab = _selectedTabIndex;
+    if (mounted) {
+      super.setState(fn);
+      if (_selectedTabIndex != oldTab) {
+        _saveSelectedTab(_selectedTabIndex);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final projectState = ref.watch(projectProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
 
-    return projectState.when(
-      data: (projects) {
-        final project = projects.firstWhere(
-          (p) => p.id == widget.projectId,
-          orElse: () => Project(
-            id: 'N/A',
-            pid: 'N/A',
-            name: 'Project Not Found',
-            brandColor: Colors.grey,
-            category: 'N/A',
-            status: ProjectStatus.onHold,
-            totalBudget: 0,
-            consumedBudget: 0,
-            taskIds: [],
-            description: '',
-            startDate: DateTime.now(),
-          ),
-        );
+    final projects = projectState.value ?? <Project>[];
 
-        if (_selectedTabIndex == 1 &&
-            project.managerSignature.isNotEmpty &&
-            project.founderSignature.isEmpty &&
-            !_isAuthDialogOpen) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _showFounderAuthDialog(context, project);
-          });
-        }
+    final project = projects.firstWhere(
+      (p) => p.id == widget.projectId,
+      orElse: () => Project(
+        id: widget.projectId,
+        pid: '...',
+        name: 'Loading Project...',
+        brandColor: Colors.grey,
+        category: '...',
+        status: ProjectStatus.planning,
+        totalBudget: 0,
+        consumedBudget: 0,
+        taskIds: [],
+        description: 'Synchronizing blueprint registry records in real time...',
+        startDate: DateTime.now(),
+      ),
+    );
 
-        return Scaffold(
-          key: _scaffoldKey,
-          backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
-          drawer: !isDesktop ? _buildSidebar(project, isDark, true) : null,
-          body: SafeArea(
-            top: !isDesktop,
-            bottom: !isDesktop,
-            left: !isDesktop,
-            right: !isDesktop,
-            child: Column(
-              children: [
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (isDesktop) _buildSidebar(project, isDark, false),
-                      Expanded(
-                        child: Stack(
-                          children: [
-                            // Content Area
-                            Positioned.fill(
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: kHeaderHeight),
-                                child: AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 400),
-                                  child: _buildContent(project, isDark),
-                                ),
-                              ),
+    if (_selectedTabIndex == 1 &&
+        project.managerSignature.isNotEmpty &&
+        project.founderSignature.isEmpty &&
+        !_isAuthDialogOpen &&
+        project.id != 'N/A' &&
+        project.name != 'Loading Project...') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showFounderAuthDialog(context, project);
+      });
+    }
+
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      drawer: !isDesktop ? _buildSidebar(project, isDark, true) : null,
+      body: SafeArea(
+        top: !isDesktop,
+        bottom: !isDesktop,
+        left: !isDesktop,
+        right: !isDesktop,
+        child: Column(
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isDesktop) _buildSidebar(project, isDark, false),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        // Content Area
+                        Positioned.fill(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: kHeaderHeight),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 400),
+                              child: _buildContent(project, isDark),
                             ),
-                            
-                            // Header
-                            Positioned(
-                              top: 0, 
-                              left: 0, 
-                              right: 0,
-                              child: _buildHeader(project, isDark, !isDesktop),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                        
+                        // Header
+                        Positioned(
+                          top: 0, 
+                          left: 0, 
+                          right: 0,
+                          child: _buildHeader(project, isDark, !isDesktop),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (err, stack) => Scaffold(body: Center(child: Text('Error: $err'))),
+          ],
+        ),
+      ),
     );
   }
 

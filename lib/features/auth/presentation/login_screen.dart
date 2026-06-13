@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'dart:io' if (dart.library.html) 'package:frontend/core/utils/io_stub.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:universal_html/html.dart' as html;
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/config/app_config.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -146,18 +148,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ),
             ),
           ),
-          Positioned(
-            bottom: 24,
-            right: 24,
-            child: FloatingActionButton(
-              key: const ValueKey('dev_auto_login_btn'),
-              mini: true,
-              backgroundColor: const Color(0xFF6366F1),
-              foregroundColor: Colors.white,
-              child: const Icon(Icons.developer_mode_rounded),
-              onPressed: () => _showDevAutoLoginSheet(context),
+          if (kDebugMode)
+            Positioned(
+              bottom: 24,
+              right: 24,
+              child: FloatingActionButton(
+                key: const ValueKey('dev_auto_login_btn'),
+                mini: true,
+                backgroundColor: const Color(0xFF6366F1),
+                foregroundColor: Colors.white,
+                child: const Icon(Icons.developer_mode_rounded),
+                onPressed: () => _showDevAutoLoginSheet(context),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -465,73 +468,148 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withOpacity(0.5),
       builder: (context) {
-        return Container(
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF111827) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border.all(
-              color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
-              width: 1,
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6366F1).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.developer_mode_rounded, color: Color(0xFF6366F1), size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Developer Auto-Login',
-                    style: GoogleFonts.inter(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final activeUrl = AppConfig.baseUrl;
+            return FutureBuilder<SharedPreferences>(
+              future: SharedPreferences.getInstance(),
+              builder: (context, snapshot) {
+                final hasOverride = snapshot.hasData && 
+                    snapshot.data!.containsKey('ebm_base_url_override');
+                
+                return Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF111827) : Colors.white,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                    border: Border.all(
+                      color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+                      width: 1,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildDevRoleButton(
-                context: context,
-                isDark: isDark,
-                roleName: 'Admin',
-                email: 'admin@ebfic.dev',
-                password: 'password',
-                icon: Icons.security_rounded,
-                color: const Color(0xFF3B82F6),
-              ),
-              const SizedBox(height: 12),
-              _buildDevRoleButton(
-                context: context,
-                isDark: isDark,
-                roleName: 'Sub-Admin',
-                email: 'subadmin@ebfic.dev',
-                password: 'password',
-                icon: Icons.shield_outlined,
-                color: const Color(0xFF10B981),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Note: This overlay is only visible during development (kDebugMode).',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  color: isDark ? Colors.white38 : Colors.black38,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.developer_mode_rounded, color: Color(0xFF6366F1), size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Developer Auto-Login',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (hasOverride)
+                            TextButton.icon(
+                              onPressed: () async {
+                                final prefs = await SharedPreferences.getInstance();
+                                await prefs.remove('ebm_base_url_override');
+                                await AppConfig.init();
+                                setModalState(() {});
+                              },
+                              icon: const Icon(Icons.refresh_rounded, size: 16, color: Colors.orangeAccent),
+                              label: Text(
+                                'Reset Override',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orangeAccent,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: hasOverride 
+                              ? Colors.orangeAccent.withOpacity(0.08) 
+                              : (isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03)),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: hasOverride 
+                                ? Colors.orangeAccent.withOpacity(0.25) 
+                                : (isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05)),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hasOverride ? '⚠️ MANUAL BASE URL OVERRIDE ACTIVE' : '🔗 ACTIVE BACKEND API URL',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w900,
+                                color: hasOverride ? Colors.orangeAccent : (isDark ? Colors.white38 : Colors.black45),
+                                letterSpacing: 1,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            SelectableText(
+                              activeUrl,
+                              style: TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: hasOverride ? Colors.orangeAccent : (isDark ? Colors.white70 : Colors.black87),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      _buildDevRoleButton(
+                        context: context,
+                        isDark: isDark,
+                        roleName: 'Admin',
+                        email: 'admin@ebfic.dev',
+                        password: 'password',
+                        icon: Icons.security_rounded,
+                        color: const Color(0xFF3B82F6),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildDevRoleButton(
+                        context: context,
+                        isDark: isDark,
+                        roleName: 'Sub-Admin',
+                        email: 'subadmin@ebfic.dev',
+                        password: 'password',
+                        icon: Icons.shield_outlined,
+                        color: const Color(0xFF10B981),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Note: This overlay is only visible during development (kDebugMode).',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.white38 : Colors.black38,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
         );
       },
     );
@@ -586,7 +664,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     children: [
                       Text(
                         roleName,
-                        style: GoogleFonts.inter(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: isDark ? Colors.white : const Color(0xFF0F172A),
@@ -595,7 +673,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       const SizedBox(height: 2),
                       Text(
                         email,
-                        style: GoogleFonts.inter(
+                        style: TextStyle(
                           fontSize: 12,
                           color: isDark ? Colors.white54 : Colors.black54,
                         ),

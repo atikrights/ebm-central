@@ -6,12 +6,29 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppConfig {
   static const String _storageKey = 'ebm_base_url_override';
   static String? _customBaseUrl;
+  static SharedPreferences? _prefs;
+  static String? _lastRoute;
+
+  /// Cached SharedPreferences instance
+  static SharedPreferences? get prefs => _prefs;
+
+  /// Last visited route path
+  static String? get lastRoute => _lastRoute;
 
   /// Must be called once at app startup
   static Future<void> init() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      _customBaseUrl = prefs.getString(_storageKey);
+      _prefs = await SharedPreferences.getInstance();
+      _customBaseUrl = _prefs?.getString(_storageKey);
+      _lastRoute = _prefs?.getString('ebm_last_route');
+    } catch (_) {}
+  }
+
+  /// Persist the last visited route path
+  static Future<void> saveLastRoute(String route) async {
+    try {
+      _lastRoute = route;
+      await _prefs?.setString('ebm_last_route', route);
     } catch (_) {}
   }
 

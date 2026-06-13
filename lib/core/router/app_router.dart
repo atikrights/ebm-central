@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../auth/auth_provider.dart';
 import '../layout/app_layout.dart';
+import '../config/app_config.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/join_screen.dart';
 import '../../features/mail/presentation/mail_dashboard_screen.dart';
@@ -81,10 +82,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(_routerNotifierProvider);
 
   return GoRouter(
-    initialLocation: '/',
+    initialLocation: AppConfig.lastRoute ?? '/',
     debugLogDiagnostics: false,
     refreshListenable: notifier,
-    redirect: notifier.redirect,
+    redirect: (context, state) {
+      final redirectResult = notifier.redirect(context, state);
+      if (redirectResult != null) return redirectResult;
+
+      final authState = ref.read(authProvider);
+      if (authState.isLoggedIn) {
+        final path = state.uri.toString();
+        if (path.isNotEmpty && 
+            !path.startsWith('/login') && 
+            !path.startsWith('/sso-gate') && 
+            !path.startsWith('/authorize') && 
+            !path.startsWith('/join')) {
+          AppConfig.saveLastRoute(path);
+        }
+      }
+      return null;
+    },
 
     routes: [
       ShellRoute(
@@ -109,7 +126,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/live',
             name: 'live',
-            builder: (context, state) => const AppLayout(initialIndex: 0),
+            redirect: (context, state) => '/',
           ),
 
           GoRoute(

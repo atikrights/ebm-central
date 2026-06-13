@@ -95,7 +95,7 @@ class AppLayout extends ConsumerStatefulWidget {
 
 class _AppLayoutState extends ConsumerState<AppLayout> {
   late int _currentIndex;
-  bool _isLoading = true;
+  bool _isLoading = false;
   Timer? _globalCallTicker;
   final Set<String> _expandedMenus = {}; // Track expanded sidebar menus
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -126,14 +126,8 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     super.dispose();
   }
 
-  void _startLoading() async {
-    // Show splash for 2.5 seconds for a premium feel
-    await Future.delayed(const Duration(milliseconds: 2500));
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-    }
+  void _startLoading() {
+    // Splash delay removed for instant navigation.
   }
 
   final List<Widget> _screens = [
@@ -663,7 +657,6 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
               physics: const BouncingScrollPhysics(),
               child: Column(
                 children: [
-                  _sidebarItem(0, Icons.sensors_rounded, 'Live', isExpanded, isDark, hasStatusIndicator: true),
                   _sidebarItem(1, Icons.home_filled, 'Home', isExpanded, isDark),
 
                   // ── MASTER WORKPLACE (Super Admin & Admin) ────────
