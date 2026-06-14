@@ -34,7 +34,7 @@ jobs:
 
       - name: Build Web
         run: |
-          flutter build web --release --base-href "/" --dart-define=API_URL=https://api.ebfic.store
+          flutter build web --release --base-href "/" --dart-define=API_URL=https://api.ebfic.store --pwa-strategy none
 
       - name: Build Android APK
         run: |
