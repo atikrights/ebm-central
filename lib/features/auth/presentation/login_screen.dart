@@ -157,15 +157,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               backgroundColor: const Color(0xFF6366F1),
               foregroundColor: Colors.white,
               child: const Icon(Icons.developer_mode_rounded),
-              onPressed: () {
-                if (kDebugMode) {
-                  _showDevAutoLoginSheet(context);
-                } else {
-                  _promptDevPassword(context, () {
-                    _showDevAutoLoginSheet(context);
-                  });
-                }
-              },
+              onPressed: () => _showDevAutoLoginSheet(context),
             ),
           ),
         ],
@@ -701,60 +693,5 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-  void _promptDevPassword(BuildContext context, VoidCallback onSuccess) {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
-        return AlertDialog(
-          backgroundColor: isDark ? const Color(0xFF111827) : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: const [
-              Icon(Icons.lock_outline_rounded, color: Color(0xFF6366F1)),
-              SizedBox(width: 8),
-              Text('Enter Gate Password'),
-            ],
-          ),
-          content: TextField(
-            controller: controller,
-            obscureText: true,
-            style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-            decoration: InputDecoration(
-              hintText: 'Enter password',
-              hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38),
-              filled: true,
-              fillColor: isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (controller.text == 'atikrightsway') {
-                  Navigator.pop(dialogContext);
-                  onSuccess();
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Incorrect Password'), backgroundColor: Colors.redAccent),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6366F1),
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Confirm'),
-            ),
-          ],
-        );
-      },
-    );
-  }
+
 }
