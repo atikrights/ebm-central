@@ -160,8 +160,23 @@ class _NoticeScreenState extends State<NoticeScreen> {
   List<NoteModel> get _getPinnedNotices {
     var list = globalNotes.where((n) => n.isPinned).toList();
     if (_startDate != null) list = list.where((n) => n.date.isAfter(_startDate!)).toList();
-    if (_endDate != null) list = list.where((n) => n.date.isBefore(_endDate!)).toList();
+    if (_endDate != null) {
+      final endLimit = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+      list = list.where((n) => n.date.isBefore(endLimit)).toList();
+    }
     return list.isEmpty ? globalNotes.where((n) => n.isPinned).take(1).toList() : list; 
+  }
+
+  List<NoticeModel> get _getFilteredNotices {
+    var list = dummyNotices.toList();
+    if (_startDate != null) {
+      list = list.where((n) => n.date.isAfter(_startDate!)).toList();
+    }
+    if (_endDate != null) {
+      final endLimit = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+      list = list.where((n) => n.date.isBefore(endLimit)).toList();
+    }
+    return list;
   }
 
   @override
@@ -242,18 +257,37 @@ class _NoticeScreenState extends State<NoticeScreen> {
           // UNLIMITED NOTICE LIST
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final notice = dummyNotices[index];
-                  return _buildNoticeCard(context, notice, isDark)
-                      .animate(delay: (index * 100).ms)
-                      .fadeIn(duration: 500.ms)
-                      .slideX(begin: 0.1, end: 0);
-                },
-                childCount: dummyNotices.length,
-              ),
-            ),
+            sliver: _getFilteredNotices.isEmpty
+                ? SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 40, bottom: 40),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(IconsaxPlusLinear.document_text_1, size: 48, color: Colors.grey.withOpacity(0.5)),
+                            const SizedBox(height: 16),
+                            Text(
+                              "No notices found for the selected period",
+                              style: GoogleFonts.outfit(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
+                : SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final notice = _getFilteredNotices[index];
+                        return _buildNoticeCard(context, notice, isDark)
+                            .animate(delay: (index * 100).ms)
+                            .fadeIn(duration: 500.ms)
+                            .slideX(begin: 0.1, end: 0);
+                      },
+                      childCount: _getFilteredNotices.length,
+                    ),
+                  ),
           ),
           
           const SliverToBoxAdapter(child: SizedBox(height: 40)),
