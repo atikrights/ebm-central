@@ -53,6 +53,10 @@ jobs:
             -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
             build/web/ \
             ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:domains/ebfic.store/public_html/central/
+      - name: 🧹 Purge Web & API Cache
+        run: |
+          curl -sS "https://api.ebfic.store/reset_cache.php?secret=ebm-deploy-2026" || true
+          curl -sS "https://central.ebfic.store/clear_cache.php" || true
 
       - name: Upload Android APK Artifact
         uses: actions/upload-artifact@v4
