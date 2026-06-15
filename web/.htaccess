@@ -1,8 +1,10 @@
 # Prevent caching for Flutter Web bootstrap and configuration files
 <FilesMatch "\.(html|js|json)$">
     <IfModule mod_headers.c>
-        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0, post-check=0, pre-check=0, private"
         Header set Pragma "no-cache"
         Header set Expires "Wed, 11 Jan 1984 05:00:00 GMT"
+        Header set X-LiteSpeed-Cache-Control "no-cache"
+        Header set X-Accel-Expires "0"
     </IfModule>
 </FilesMatch>
