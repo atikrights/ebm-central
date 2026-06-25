@@ -47,11 +47,13 @@ import '../../features/chat/presentation/chat_dashboard_screen.dart';
 import '../../features/governance/presentation/authority_matrix_screen.dart';
 import '../../features/security/presentation/chat_governance_screen.dart';
 import '../../features/settings/presentation/update_screen.dart';
+import '../../features/settings/presentation/preferences_screen.dart';
 import '../../features/notices/presentation/notice_screen.dart';
 import '../../features/brief/presentation/brief_roadmap_screen.dart';
 import '../../features/brief/presentation/brief_central_screen.dart';
 import 'dart:async';
 import '../../features/chat/data/unread_chat_count_provider.dart';
+import '../providers/preferences_provider.dart';
 
 
 // Global header height constant
@@ -183,6 +185,7 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
     const NoticeScreen(), // Index 49: Notices
     const BriefRoadmapScreen(), // Index 50: Brief -> Roadmap
     const BriefCentralScreen(), // Index 51: Brief -> Central
+    const PreferencesScreen(), // Index 52: Language & Currency Settings
   ];
 
   static const Map<int, String> _indexToPath = {
@@ -811,6 +814,7 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                     isDark: isDark,
                     subItems: [
                       _SubMenuItem(index: 6, label: 'Account Profile', icon: Icons.person_outline),
+                      _SubMenuItem(index: 52, label: 'Language & Currency', icon: Icons.translate_rounded),
                       _SubMenuItem(index: 47, label: 'System Update', icon: Icons.refresh_rounded),
                     ],
                   ),
@@ -1367,7 +1371,19 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
                         
                         Divider(color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05)),
                         
-                        // --- Footer / Logout ---
+                        // --- Preferences (Language & Currency) ---
+                        _buildDropdownItem(
+                          icon: Icons.language_rounded,
+                          label: "Preferences (Language & Currency)",
+                          onTap: () {
+                            Navigator.pop(context);
+                            _showPreferencesDialog(context, isDark);
+                          },
+                          isDark: isDark,
+                        ),
+                        
+                        Divider(color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05)),
+
                         _buildDropdownItem(
                           icon: Icons.logout_rounded,
                           label: "Terminate Session",
@@ -1432,6 +1448,120 @@ class _AppLayoutState extends ConsumerState<AppLayout> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showPreferencesDialog(BuildContext context, bool isDark) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final textColor = isDark ? Colors.white70 : Colors.black87;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return Consumer(
+          builder: (ctx, WidgetRef dialogRef, child) {
+            final prefs = dialogRef.watch(preferencesProvider);
+
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF1E2128) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  Icon(Icons.language_rounded, color: primaryColor, size: 22),
+                  const SizedBox(width: 12),
+                  Text(
+                    L10n.get('settings', prefs.language),
+                    style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Language section
+                  Text(
+                    L10n.get('language', prefs.language),
+                    style: TextStyle(color: textColor.withOpacity(0.5), fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: prefs.availableLanguages.map((lang) {
+                      final selected = prefs.language == lang;
+                      return ChoiceChip(
+                        label: Text(
+                          lang == 'en' ? '🇬🇧  ${L10n.get("english", prefs.language)}' : '🇧🇩  ${L10n.get("bangla", prefs.language)}',
+                        ),
+                        selected: selected,
+                        onSelected: (val) {
+                          if (val) {
+                            dialogRef.read(preferencesProvider.notifier)
+                                .updatePreferences(language: lang, currency: prefs.currency);
+                          }
+                        },
+                        selectedColor: primaryColor.withOpacity(0.18),
+                        labelStyle: TextStyle(
+                          color: selected ? primaryColor : textColor,
+                          fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                        ),
+                        side: BorderSide(
+                          color: selected ? primaryColor.withOpacity(0.5) : (isDark ? Colors.white12 : Colors.black12),
+                        ),
+                        backgroundColor: Colors.transparent,
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 24),
+                  // Currency section
+                  Text(
+                    L10n.get('currency', prefs.language),
+                    style: TextStyle(color: textColor.withOpacity(0.5), fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: prefs.exchangeRates.keys.map((curr) {
+                      final selected = prefs.currency == curr;
+                      final rate = prefs.exchangeRates[curr] ?? 1.0;
+                      return ChoiceChip(
+                        label: Text('$curr  (×${rate.toStringAsFixed(2)})'),
+                        selected: selected,
+                        onSelected: (val) {
+                          if (val) {
+                            dialogRef.read(preferencesProvider.notifier)
+                                .updatePreferences(language: prefs.language, currency: curr);
+                          }
+                        },
+                        selectedColor: primaryColor.withOpacity(0.18),
+                        labelStyle: TextStyle(
+                          color: selected ? primaryColor : textColor,
+                          fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                        ),
+                        side: BorderSide(
+                          color: selected ? primaryColor.withOpacity(0.5) : (isDark ? Colors.white12 : Colors.black12),
+                        ),
+                        backgroundColor: Colors.transparent,
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text(
+                    L10n.get('save', prefs.language),
+                    style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

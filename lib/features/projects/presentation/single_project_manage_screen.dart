@@ -1726,7 +1726,7 @@ class _PlansTabCentralState extends State<_PlansTabCentral> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.ref.read(taskProvider.notifier).syncWithDatabase(
+      widget.ref.read(taskProvider).syncWithDatabase(
         projectId: widget.project.id,
         companyId: widget.project.companyId,
       );
@@ -2715,7 +2715,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(taskProvider.notifier).syncWithDatabase(
+      ref.read(taskProvider).syncWithDatabase(
         companyId: widget.project.companyId,
       );
     });
@@ -2744,6 +2744,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
         case TaskStatus.review: return Colors.amberAccent;
         case TaskStatus.done: return Colors.greenAccent;
         case TaskStatus.completed: return Colors.tealAccent;
+        case TaskStatus.hold: return Colors.redAccent;
       }
     } else {
       switch (status) {
@@ -2752,6 +2753,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
         case TaskStatus.review: return const Color(0xFFB45309); // Deep Amber/Orange
         case TaskStatus.done: return const Color(0xFF15803D); // Deep Green
         case TaskStatus.completed: return const Color(0xFF0F766E); // Deep Teal
+        case TaskStatus.hold: return const Color(0xFFB91C1C); // Deep Red Accent
       }
     }
   }
@@ -2796,7 +2798,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
   }
 
   void _updateNodeStatus(SystemTask task, TaskStatus newStatus) async {
-    await ref.read(taskProvider.notifier).updateTaskStatus(task.id, newStatus);
+    await ref.read(taskProvider).updateTaskStatus(task.id, newStatus);
     
     // Log the status update comment
     final newComment = TaskComment(
@@ -2806,7 +2808,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
       createdAt: DateTime.now()
     );
     final updatedTask = task.copyWith(status: newStatus, comments: [...task.comments, newComment]);
-    await ref.read(taskProvider.notifier).updateTask(updatedTask);
+    await ref.read(taskProvider).updateTask(updatedTask);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -2862,7 +2864,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
             : await File(result.files.first.path!).readAsString();
             
         final List decoded = json.decode(content);
-        final tp = ref.read(taskProvider.notifier);
+        final tp = ref.read(taskProvider);
         int count = 0;
         for (final m in decoded) {
           final oldId = m['id'] ?? DateTime.now().millisecondsSinceEpoch.toString();
@@ -2912,7 +2914,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
-              final tp = ref.read(taskProvider.notifier);
+              final tp = ref.read(taskProvider);
               final query = _searchCtrl.text.trim().toUpperCase();
               if (query.isEmpty) return;
 
@@ -3011,7 +3013,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
                           icon: const Icon(IconsaxPlusLinear.rotate_left, color: Colors.green),
                           tooltip: 'Restore to Console',
                           onPressed: () async {
-                            await ref.read(taskProvider.notifier).updateTask(task.copyWith(isArchived: false, status: TaskStatus.completed));
+                            await ref.read(taskProvider).updateTask(task.copyWith(isArchived: false, status: TaskStatus.completed));
                             if (ctx.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task Restored!'), behavior: SnackBarBehavior.floating));
                             }
@@ -3067,7 +3069,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
 
   void _executeQuickAdd(String title, BuildContext ctx) async {
     if (title.trim().isEmpty) return;
-    final tp = ref.read(taskProvider.notifier);
+    final tp = ref.read(taskProvider);
     final newTask = SystemTask(
       id: const Uuid().v4(),
       taskNumber: 'TSK-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
@@ -3145,7 +3147,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
                               content: 'Node Demoted Action: Moved to ${prevStatus.displayName}',
                               createdAt: DateTime.now()
                             );
-                            await ref.read(taskProvider.notifier).updateTask(currentTask.copyWith(status: prevStatus, comments: [...currentTask.comments, newComment]));
+                            await ref.read(taskProvider).updateTask(currentTask.copyWith(status: prevStatus, comments: [...currentTask.comments, newComment]));
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Node Demoted to ${prevStatus.displayName}.'), behavior: SnackBarBehavior.floating));
                             }
@@ -3225,7 +3227,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
                                 content: commentCtrl.text.trim(),
                                 createdAt: DateTime.now()
                             );
-                            await ref.read(taskProvider.notifier).updateTask(currentTask.copyWith(comments: [...currentTask.comments, newComment]));
+                            await ref.read(taskProvider).updateTask(currentTask.copyWith(comments: [...currentTask.comments, newComment]));
                             commentCtrl.clear();
                           }
                         },
@@ -3677,7 +3679,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
                 InkWell(
                   onTap: () async {
                     if (task.status == TaskStatus.completed) {
-                      await ref.read(taskProvider.notifier).updateTask(task.copyWith(isArchived: true));
+                      await ref.read(taskProvider).updateTask(task.copyWith(isArchived: true));
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task Archived to History!'), behavior: SnackBarBehavior.floating));
                       }
@@ -3697,7 +3699,7 @@ class _PlanConsoleCentralState extends ConsumerState<_PlanConsoleCentral> {
                         content: 'Node Integrity Approved: Promoted to ${nextStatus.displayName}',
                         createdAt: DateTime.now()
                       );
-                      await ref.read(taskProvider.notifier).updateTask(task.copyWith(status: nextStatus, comments: [...task.comments, newComment]));
+                      await ref.read(taskProvider).updateTask(task.copyWith(status: nextStatus, comments: [...task.comments, newComment]));
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Task Promoted to ${nextStatus.displayName}!'), behavior: SnackBarBehavior.floating));
                       }
@@ -4722,7 +4724,7 @@ class _StrategicRadarMapCentralState extends ConsumerState<_StrategicRadarMapCen
   }
 
   void _syncData() {
-    ref.read(taskProvider.notifier).syncWithDatabase(
+    ref.read(taskProvider).syncWithDatabase(
       projectId: widget.project.id, 
       companyId: widget.project.companyId,
     );
@@ -5142,6 +5144,7 @@ Color _getSimulatedStatusColor(TaskStatus status) {
     case TaskStatus.completed: return Colors.green;
     case TaskStatus.review: return Colors.amberAccent;
     case TaskStatus.done: return Colors.tealAccent;
+    case TaskStatus.hold: return Colors.redAccent;
   }
 }
 
@@ -5298,7 +5301,7 @@ Widget _buildTaskDetailsModal({
                     }).toList(),
                     onChanged: canApprove ? (newStatus) {
                       if (newStatus != null && newStatus != task.status) {
-                        ref.read(taskProvider.notifier).updateTaskStatus(task.id, newStatus);
+                        ref.read(taskProvider).updateTaskStatus(task.id, newStatus);
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                           content: Text('Task status updated to ${newStatus.displayName}'),
@@ -5318,7 +5321,7 @@ Widget _buildTaskDetailsModal({
                   child: OutlinedButton.icon(
                     onPressed: () async {
                       final updated = task.copyWith(planId: '', projectId: '');
-                      await ref.read(taskProvider.notifier).updateTask(updated);
+                      await ref.read(taskProvider).updateTask(updated);
                       if (context.mounted) {
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(

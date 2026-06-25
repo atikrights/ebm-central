@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iconsax_plus/iconsax_plus.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:responsive_framework/responsive_framework.dart';
+import 'package:flutter/services.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../tasks/models/system_task.dart';
 import '../../tasks/providers/task_provider.dart';
+import '../../../core/auth/auth_provider.dart';
 import 'task_workspace_screen.dart';
 import '../../projects/providers/project_provider.dart';
 import '../../projects/models/project.dart';
@@ -36,11 +38,12 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
   // ignore: unused_field
   final Set<String> _selectedTaskIds = {};
   String _searchQuery = "";
+  bool _showRecycleBin = false;
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(length: 5, vsync: this);
     _tabCtrl.addListener(() => setState(() {}));
   }
 
@@ -60,10 +63,15 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
     // Read local task provider state
+    bool hasPlan(SystemTask t) => t.planId != null && t.planId!.isNotEmpty && t.planId != 'null' && t.planId != 'undefined';
+
     final tp = ref.watch(taskProvider);
     final allTasks = tp.allTasks.where((t) {
       if (_searchQuery.isNotEmpty && !t.title.toLowerCase().contains(_searchQuery)) return false;
       if (_tabCtrl.index == 0) return !t.isArchived;
+      if (_tabCtrl.index == 1) return hasPlan(t) && !t.isArchived && t.status != TaskStatus.completed && t.status != TaskStatus.hold;
+      if (_tabCtrl.index == 2) return hasPlan(t) && !t.isArchived && t.status == TaskStatus.completed;
+      if (_tabCtrl.index == 3) return !hasPlan(t) && !t.isArchived;
       return t.isArchived;
     }).toList();
 
@@ -98,24 +106,28 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: isDesktop 
-        ? FloatingActionButton.extended(
-            onPressed: () => _showCreateDialog(context),
-            backgroundColor: primaryColor,
-            elevation: 0,
-            icon: const Icon(IconsaxPlusBold.add, color: Colors.white),
-            label: const Text('Create Task', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          )
-        : FloatingActionButton(
-            onPressed: () => _showCreateDialog(context),
-            backgroundColor: primaryColor,
-            elevation: 0,
-            child: const Icon(IconsaxPlusBold.add, color: Colors.white),
-          ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 7), // Exact 7px top space (4+3)
+      floatingActionButton: _showRecycleBin 
+        ? null 
+        : (isDesktop 
+            ? FloatingActionButton.extended(
+                onPressed: () => _showCreateDialog(context),
+                backgroundColor: primaryColor,
+                elevation: 0,
+                icon: const Icon(IconsaxPlusBold.add, color: Colors.white),
+                label: const Text('Create Task', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              )
+            : FloatingActionButton(
+                onPressed: () => _showCreateDialog(context),
+                backgroundColor: primaryColor,
+                elevation: 0,
+                child: const Icon(IconsaxPlusBold.add, color: Colors.white),
+              )),
+      body: _showRecycleBin
+        ? _buildRecycleBinView(context, isDark, textColor, subColor, primaryColor, isDesktop)
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 7), // Exact 7px top space (4+3)
           Padding(
             padding: EdgeInsets.symmetric(horizontal: isDesktop ? 24 : 16),
             child: Column(
@@ -129,12 +141,15 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _buildFilterTab('Active', 0, isDark, primaryColor, tp.allTasks.where((t) => !t.isArchived).length),
-                        _buildFilterTab('Archived', 1, isDark, primaryColor, tp.allTasks.where((t) => t.isArchived).length),
+                        _buildFilterTab('All', 0, isDark, primaryColor, tp.allTasks.where((t) => !t.isArchived).length),
+                        _buildFilterTab('Active', 1, isDark, primaryColor, tp.allTasks.where((t) => hasPlan(t) && !t.isArchived && t.status != TaskStatus.completed && t.status != TaskStatus.hold).length),
+                        _buildFilterTab('Complete', 2, isDark, primaryColor, tp.allTasks.where((t) => hasPlan(t) && !t.isArchived && t.status == TaskStatus.completed).length),
+                        _buildFilterTab('Draft', 3, isDark, primaryColor, tp.allTasks.where((t) => !hasPlan(t) && !t.isArchived).length),
+                        _buildFilterTab('Archive', 4, isDark, primaryColor, tp.allTasks.where((t) => t.isArchived).length),
                       ],
                     ),
                   ),
-                ),
+                ),    
               ],
             ),
           ),
@@ -164,99 +179,236 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
 
                       final task = (item as TaskCardItem).task;
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => TaskWorkspaceScreen(taskId: task.id)));
-                          },
-                          child: GlassContainer(
-                            borderRadius: 12.0,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: _getStatusColor(task.status).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(IconsaxPlusBold.task, color: _getStatusColor(task.status), size: 20),
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: GlassContainer(
+                          borderRadius: 12.0,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: _getStatusColor(task.status).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        task.title,
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'ID: ${task.taskNumber} • ${task.status.displayName}',
-                                        style: TextStyle(fontSize: 12, color: subColor),
-                                      ),
-                                      if (task.createdAt != null) ...[
-                                        const SizedBox(height: 5),
-                                        Wrap(
-                                          spacing: 12,
-                                          runSpacing: 4,
-                                          crossAxisAlignment: WrapCrossAlignment.center,
-                                          children: [
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(IconsaxPlusLinear.calendar_1, size: 12, color: subColor.withOpacity(0.55)),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  'Created: ${_formatDateTime(task.createdAt)}',
-                                                  style: TextStyle(fontSize: 10.5, color: subColor.withOpacity(0.8), letterSpacing: -0.2),
-                                                ),
-                                              ],
-                                            ),
-                                            if (task.updatedAt != null && 
-                                                task.createdAt != null && 
-                                                task.updatedAt!.difference(task.createdAt!).inSeconds > 5)
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(IconsaxPlusLinear.edit_2, size: 11, color: Colors.blue.withOpacity(0.7)),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    'Updated: ${_formatDateTime(task.updatedAt)}',
-                                                    style: TextStyle(fontSize: 10.5, color: Colors.blue.withOpacity(0.85), fontWeight: FontWeight.w500, letterSpacing: -0.2),
-                                                  ),
-                                                ],
+                                child: Icon(IconsaxPlusBold.task, color: _getStatusColor(task.status), size: 16),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      task.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      children: [
+                                        GestureDetector(
+                                          onTap: () {
+                                            Clipboard.setData(ClipboardData(text: task.taskNumber));
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('${task.taskNumber} copied to clipboard!'),
+                                                duration: const Duration(seconds: 1),
                                               ),
+                                            );
+                                          },
+                                          child: MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: Text(
+                                              task.taskNumber,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: primaryColor,
+                                                fontWeight: FontWeight.bold,
+                                                decoration: TextDecoration.underline,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          '•',
+                                          style: TextStyle(fontSize: 11, color: subColor.withOpacity(0.5)),
+                                        ),
+                                        // Status Badge
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: _getStatusColor(task.status).withOpacity(0.12),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            task.status.displayName,
+                                            style: TextStyle(fontSize: 9, color: _getStatusColor(task.status), fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                        Text(
+                                          '•',
+                                          style: TextStyle(fontSize: 11, color: subColor.withOpacity(0.5)),
+                                        ),
+                                        // Category classification badge
+                                        () {
+                                          final isArchived = task.isArchived;
+                                          final draft = !hasPlan(task);
+                                          final complete = task.status == TaskStatus.completed;
+                                          
+                                          String label = 'Active';
+                                          Color badgeColor = const Color(0xFF0D7A57);
+                                          
+                                          if (isArchived) {
+                                            label = 'Archive';
+                                            badgeColor = Colors.grey;
+                                          } else if (draft) {
+                                            label = 'Draft';
+                                            badgeColor = Colors.orange;
+                                          } else if (complete) {
+                                            label = 'Complete';
+                                            badgeColor = Colors.blue;
+                                          }
+                                          
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: badgeColor.withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              label.toUpperCase(),
+                                              style: TextStyle(fontSize: 9, color: badgeColor, fontWeight: FontWeight.bold),
+                                            ),
+                                          );
+                                        }(),
+                                        Text(
+                                          '•',
+                                          style: TextStyle(fontSize: 11, color: subColor.withOpacity(0.5)),
+                                        ),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              width: 16,
+                                              height: 16,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: Colors.primaries[task.author.hashCode % Colors.primaries.length],
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: Text(
+                                                task.author.isNotEmpty ? task.author[0].toUpperCase() : 'A',
+                                                style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              task.author,
+                                              style: TextStyle(fontSize: 11, color: textColor.withOpacity(0.7), fontWeight: FontWeight.w500),
+                                            ),
                                           ],
                                         ),
                                       ],
+                                    ),
+                                    if (task.createdAt != null) ...[
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Icon(IconsaxPlusLinear.calendar_1, size: 11, color: subColor.withOpacity(0.55)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Created: ${_formatDateTime(task.createdAt)}',
+                                            style: TextStyle(fontSize: 10, color: subColor.withOpacity(0.8)),
+                                          ),
+                                          if (task.updatedAt != null && 
+                                              task.createdAt != null && 
+                                              task.updatedAt!.difference(task.createdAt!).inSeconds > 5) ...[
+                                            const SizedBox(width: 10),
+                                            Icon(IconsaxPlusLinear.edit_2, size: 10, color: Colors.blue.withOpacity(0.7)),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Updated: ${_formatDateTime(task.updatedAt)}',
+                                              style: TextStyle(fontSize: 10, color: Colors.blue.withOpacity(0.85), fontWeight: FontWeight.w500),
+                                            ),
+                                          ]
+                                        ],
+                                      ),
                                     ],
-                                  ),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: _getStatusColor(task.status).withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Text(
-                                        task.status.displayName,
-                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getStatusColor(task.status)),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      task.dueDate != null ? task.dueDate.toString().substring(0, 10) : 'No due date',
-                                      style: TextStyle(fontSize: 11, color: subColor),
-                                    ),
                                   ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(IconsaxPlusLinear.setting_4, color: primaryColor, size: 18),
+                                    tooltip: 'Manage Task',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () {
+                                      Navigator.push(context, MaterialPageRoute(builder: (_) => TaskWorkspaceScreen(taskId: task.id)));
+                                    },
+                                  ),
+                                  const SizedBox(width: 12),
+                                  if (task.dueDate != null) ...[
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Due',
+                                          style: TextStyle(fontSize: 8, color: subColor.withOpacity(0.5), fontWeight: FontWeight.bold),
+                                        ),
+                                        Text(
+                                          task.dueDate.toString().substring(0, 10),
+                                          style: TextStyle(fontSize: 10, color: subColor, fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 12),
+                                  ],
+                                  IconButton(
+                                    icon: Icon(IconsaxPlusLinear.trash, color: Colors.redAccent.withOpacity(0.8), size: 16),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    tooltip: 'Move to Recycle Bin',
+                                    onPressed: () async {
+                                      final confirm = await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          backgroundColor: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+                                          title: Text('Move to Recycle Bin?', style: TextStyle(color: textColor)),
+                                          content: Text('Are you sure you want to move this task to the Recycle Bin?', style: TextStyle(color: subColor)),
+                                          actions: [
+                                            TextButton(
+                                              child: const Text('Cancel'),
+                                              onPressed: () => Navigator.pop(ctx, false),
+                                            ),
+                                            TextButton(
+                                              child: const Text('Move', style: TextStyle(color: Colors.red)),
+                                              onPressed: () => Navigator.pop(ctx, true),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (confirm == true) {
+                                        await ref.read(taskProvider).removeTask(task.id);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Task moved to Recycle Bin.'), duration: Duration(seconds: 1)),
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ).animate().fadeIn(delay: Duration(milliseconds: 25 * index)).slideX();
@@ -299,7 +451,71 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
           ),
           const SizedBox(width: 10),
           _buildHeaderButton(IconsaxPlusLinear.filter, () => _showFilterPopup(context), isDark, primaryColor, isDesktop),
+          const SizedBox(width: 10),
+          _buildRecycleBinButton(isDark, primaryColor, isDesktop),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRecycleBinButton(bool isDark, Color primaryColor, bool isDesktop) {
+    final tp = ref.watch(taskProvider);
+    final count = tp.trashedTasks.length;
+
+    return Tooltip(
+      message: 'Recycle Bin',
+      preferBelow: false,
+      child: Material(
+        color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: () {
+            setState(() {
+              _showRecycleBin = true;
+            });
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            height: 38,
+            width: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(IconsaxPlusLinear.trash, color: isDark ? Colors.white38 : Colors.black38, size: 16),
+                if (count > 0)
+                  Positioned(
+                    right: -6,
+                    top: -6,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        color: Colors.redAccent,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 12,
+                        minHeight: 12,
+                      ),
+                      child: Text(
+                        '$count',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 7.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -416,8 +632,11 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
                 ),
               ),
               const Divider(height: 1),
-              _buildFilterOption('Active Tasks', 0, isDark, primaryColor),
-              _buildFilterOption('Archived / Drafts', 1, isDark, primaryColor),
+              _buildFilterOption('All Tasks', 0, isDark, primaryColor),
+              _buildFilterOption('Active Tasks', 1, isDark, primaryColor),
+              _buildFilterOption('Completed Tasks', 2, isDark, primaryColor),
+              _buildFilterOption('Draft Tasks', 3, isDark, primaryColor),
+              _buildFilterOption('Archive', 4, isDark, primaryColor),
               const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -537,8 +756,223 @@ class _TasksScreenState extends ConsumerState<TasksScreen> with SingleTickerProv
       case TaskStatus.review: return Colors.orange;
       case TaskStatus.done: return Colors.green;
       case TaskStatus.completed: return Colors.green;
+      case TaskStatus.hold: return Colors.redAccent;
       default: return Colors.grey;
     }
+  }
+
+  Widget _buildRecycleBinView(BuildContext context, bool isDark, Color textColor, Color subColor, Color primaryColor, bool isDesktop) {
+    final tp = ref.watch(taskProvider);
+    final auth = ref.watch(authProvider);
+    final canRenew = auth.isSuperAdmin || auth.isAdmin || auth.isSubAdmin;
+
+    final trashedTasks = tp.trashedTasks;
+
+    // Group tasks by date
+    final List<TaskListItem> listItems = [];
+    String lastHeader = '';
+    for (final task in trashedTasks) {
+      final dateHeader = task.updatedAt != null
+          ? _getDateHeader(task.updatedAt!)
+          : 'DELETED';
+      if (dateHeader != lastHeader) {
+        listItems.add(TaskHeaderItem(dateHeader));
+        lastHeader = dateHeader;
+      }
+      listItems.add(TaskCardItem(task));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 7),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: isDesktop ? 24 : 16),
+          child: Row(
+            children: [
+              IconButton(
+                icon: Icon(IconsaxPlusLinear.arrow_left, color: textColor),
+                onPressed: () => setState(() => _showRecycleBin = false),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Recycle Bin',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${trashedTasks.length} Trashed',
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.redAccent),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: listItems.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(IconsaxPlusLinear.trash, size: 64, color: isDark ? Colors.white24 : Colors.black26),
+                      const SizedBox(height: 16),
+                      Text('No tasks in Recycle Bin.', style: TextStyle(color: subColor)),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.fromLTRB(isDesktop ? 24 : 16, 8, isDesktop ? 24 : 16, 8),
+                  itemCount: listItems.length,
+                  itemBuilder: (context, index) {
+                    final item = listItems[index];
+                    if (item is TaskHeaderItem) {
+                      return _buildDateHeaderWidget(item.title, isDark);
+                    }
+
+                    final task = (item as TaskCardItem).task;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: GlassContainer(
+                        borderRadius: 12.0,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(IconsaxPlusBold.task, color: Colors.redAccent, size: 16),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    task.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      GestureDetector(
+                                        onTap: () {
+                                          Clipboard.setData(ClipboardData(text: task.taskNumber));
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('${task.taskNumber} copied to clipboard!'),
+                                              duration: const Duration(seconds: 1),
+                                            ),
+                                          );
+                                        },
+                                        child: MouseRegion(
+                                          cursor: SystemMouseCursors.click,
+                                          child: Text(
+                                            task.taskNumber,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: primaryColor,
+                                              fontWeight: FontWeight.bold,
+                                              decoration: TextDecoration.underline,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        ' • Trashed: ${_formatDateTime(task.updatedAt)}',
+                                        style: TextStyle(fontSize: 11, color: subColor),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Restore Button
+                                IconButton(
+                                  icon: const Icon(IconsaxPlusLinear.rotate_left, color: Colors.blue, size: 18),
+                                  tooltip: 'Restore Task',
+                                  onPressed: () async {
+                                    await tp.restoreTask(task.id);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Task restored successfully!'), duration: Duration(seconds: 1)),
+                                      );
+                                    }
+                                  },
+                                ),
+                                // Renew Button (only visible to admins/sub-admins)
+                                if (canRenew)
+                                  IconButton(
+                                    icon: const Icon(IconsaxPlusLinear.refresh, color: Colors.green, size: 18),
+                                    tooltip: 'Renew Task (Clone to To-Do)',
+                                    onPressed: () async {
+                                      await tp.renewTask(task.id);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Task renewed as new in To-Do list!'), duration: Duration(seconds: 1)),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                // Force Delete Button
+                                IconButton(
+                                  icon: const Icon(IconsaxPlusLinear.close_circle, color: Colors.red, size: 18),
+                                  tooltip: 'Permanently Delete',
+                                  onPressed: () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        backgroundColor: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+                                        title: Text('Permanently Delete?', style: TextStyle(color: textColor)),
+                                        content: Text('This action is permanent and cannot be undone.', style: TextStyle(color: subColor)),
+                                        actions: [
+                                          TextButton(
+                                            child: const Text('Cancel'),
+                                            onPressed: () => Navigator.pop(ctx, false),
+                                          ),
+                                          TextButton(
+                                            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                            onPressed: () => Navigator.pop(ctx, true),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirm == true) {
+                                      await tp.forceDeleteTask(task.id);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Task permanently deleted.'), duration: Duration(seconds: 1)),
+                                        );
+                                      }
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ).animate().fadeIn(delay: Duration(milliseconds: 20 * index)).slideX();
+                  },
+                ),
+        ),
+      ],
+    );
   }
 }
 
@@ -629,18 +1063,19 @@ class _CreateTaskDialogState extends ConsumerState<_CreateTaskDialog> with Singl
 
     setState(() => _isCreating = true);
 
-    final tp = ref.read(taskProvider.notifier);
+    final tp = ref.read(taskProvider);
     final cp = ref.read(companyProvider).value;
 
     final newId = DateTime.now().millisecondsSinceEpoch.toString();
     final randomSuffix = (DateTime.now().millisecondsSinceEpoch % 10000).toRadixString(16).toUpperCase().padLeft(4, '0');
     final newNumber = 'TSK-${(tp.allTasks.length + 1).toString().padLeft(3, '0')}-$randomSuffix';
 
+    final auth = ref.read(authProvider);
     final newTask = SystemTask(
       id: newId,
       taskNumber: newNumber,
       title: _titleCtrl.text,
-      author: 'Super Admin',
+      author: auth.name ?? 'Admin',
       status: TaskStatus.todo,
       priority: TaskPriority.medium,
       planId: _selectedPlan?.id,
@@ -652,9 +1087,10 @@ class _CreateTaskDialogState extends ConsumerState<_CreateTaskDialog> with Singl
     final createdTask = await tp.addTask(newTask, companyId: companyId);
 
     if (!mounted) return;
-    Navigator.pop(context);
+    final navigator = Navigator.of(context);
+    navigator.pop();
     if (createdTask != null) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => TaskWorkspaceScreen(taskId: createdTask.id)));
+      navigator.push(MaterialPageRoute(builder: (_) => TaskWorkspaceScreen(taskId: createdTask.id)));
     }
   }
 

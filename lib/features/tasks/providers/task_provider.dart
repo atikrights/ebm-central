@@ -7,6 +7,7 @@ import 'dart:async';
 class TaskProvider extends ChangeNotifier {
   final Ref _ref;
   List<SystemTask> _tasks = [];
+  List<SystemTask> _trashedTasks = [];
   bool _isLoading = false;
   Timer? _syncTimer;
 
@@ -30,6 +31,7 @@ class TaskProvider extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   List<SystemTask> get allTasks => _tasks;
+  List<SystemTask> get trashedTasks => _trashedTasks;
 
   // Sync method using real API
   Future<void> syncWithDatabase({String? projectId, String? planId, String? companyId}) async {
@@ -60,11 +62,33 @@ class TaskProvider extends ChangeNotifier {
       if (rawList != null) {
         _tasks = rawList.map((m) => SystemTask.fromMap(m)).toList();
       }
+      await syncTrashedTasks();
     } catch (e) {
       debugPrint('❌ TaskProvider Sync Error: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> syncTrashedTasks() async {
+    final api = _ref.read(apiServiceProvider);
+    if (api.token == null) return;
+
+    try {
+      final response = await api.get('/tasks/trashed');
+      List? rawList;
+      if (response is List) {
+        rawList = response;
+      } else if (response is Map && response['data'] is List) {
+        rawList = response['data'];
+      }
+
+      if (rawList != null) {
+        _trashedTasks = rawList.map((m) => SystemTask.fromMap(m)).toList();
+      }
+    } catch (e) {
+      debugPrint('❌ TaskProvider Sync Trashed Tasks Error: $e');
     }
   }
 
@@ -101,6 +125,7 @@ class TaskProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('❌ TaskProvider Update Task Error: $e');
+      rethrow;
     }
   }
 
@@ -114,12 +139,79 @@ class TaskProvider extends ChangeNotifier {
 
   Future<void> removeTask(String taskId) async {
     try {
+      final taskIdx = _tasks.indexWhere((t) => t.id == taskId);
+      if (taskIdx != -1) {
+        final removedTask = _tasks[taskIdx];
+        _tasks.removeAt(taskIdx);
+        _trashedTasks.insert(0, removedTask);
+        notifyListeners();
+      }
+
       final api = _ref.read(apiServiceProvider);
       await api.delete('/tasks/$taskId');
-      _tasks.removeWhere((t) => t.id == taskId);
-      notifyListeners();
+      await syncWithDatabase(); // background refresh
     } catch (e) {
       debugPrint('❌ TaskProvider Remove Task Error: $e');
+      await syncWithDatabase(); // fallback sync
+    }
+  }
+
+  Future<void> restoreTask(String taskId) async {
+    try {
+      final taskIdx = _trashedTasks.indexWhere((t) => t.id == taskId);
+      if (taskIdx != -1) {
+        final task = _trashedTasks[taskIdx];
+        _trashedTasks.removeAt(taskIdx);
+        _tasks.insert(0, task);
+        notifyListeners();
+      }
+
+      final api = _ref.read(apiServiceProvider);
+      await api.post('/tasks/$taskId/restore', {});
+      await syncWithDatabase(); // background refresh
+    } catch (e) {
+      debugPrint('❌ TaskProvider Restore Task Error: $e');
+      await syncWithDatabase(); // fallback sync
+    }
+  }
+
+  Future<void> forceDeleteTask(String taskId) async {
+    try {
+      final taskIdx = _trashedTasks.indexWhere((t) => t.id == taskId);
+      if (taskIdx != -1) {
+        _trashedTasks.removeAt(taskIdx);
+        notifyListeners();
+      }
+
+      final api = _ref.read(apiServiceProvider);
+      await api.delete('/tasks/$taskId/force-delete');
+      await syncWithDatabase(); // background refresh
+    } catch (e) {
+      debugPrint('❌ TaskProvider Force Delete Task Error: $e');
+      await syncWithDatabase(); // fallback sync
+    }
+  }
+
+  Future<void> renewTask(String taskId) async {
+    try {
+      final taskIdx = _trashedTasks.indexWhere((t) => t.id == taskId);
+      if (taskIdx != -1) {
+        _trashedTasks.removeAt(taskIdx);
+        notifyListeners();
+      }
+
+      final api = _ref.read(apiServiceProvider);
+      final response = await api.post('/tasks/$taskId/renew', {});
+      if (response != null) {
+        final renewedTask = SystemTask.fromMap(response);
+        _tasks.insert(0, renewedTask);
+        notifyListeners();
+      } else {
+        await syncWithDatabase();
+      }
+    } catch (e) {
+      debugPrint('❌ TaskProvider Renew Task Error: $e');
+      await syncWithDatabase(); // fallback sync
     }
   }
 }

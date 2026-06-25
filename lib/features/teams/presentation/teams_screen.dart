@@ -183,11 +183,16 @@ class TeamsScreen extends ConsumerStatefulWidget {
 class _TeamsScreenState extends ConsumerState<TeamsScreen> {
   bool _hasSeenWelcome = false;
   Timer? _refreshTimer;
+  late final WebSocketService _webSocketService;
 
   void _onWsEvent(PusherEvent event) {
     if (event.eventName.contains('data.updated') || event.eventName.contains('user.created')) {
       if (mounted) {
-        ref.invalidate(teamsProvider);
+        try {
+          ref.invalidate(teamsProvider);
+        } catch (_) {
+          // Handle element disposal safely
+        }
       }
     }
   }
@@ -197,19 +202,24 @@ class _TeamsScreenState extends ConsumerState<TeamsScreen> {
     super.initState();
     
     // Real-time listener for "God Mode" updates
-    ref.read(webSocketServiceProvider).addListener(_onWsEvent);
+    _webSocketService = ref.read(webSocketServiceProvider);
+    _webSocketService.addListener(_onWsEvent);
 
     // Auto-refresh fallback
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (mounted) {
-        ref.invalidate(teamsProvider);
+        try {
+          ref.invalidate(teamsProvider);
+        } catch (_) {
+          // Handle element disposal safely
+        }
       }
     });
   }
 
   @override
   void dispose() {
-    ref.read(webSocketServiceProvider).removeListener(_onWsEvent);
+    _webSocketService.removeListener(_onWsEvent);
     _refreshTimer?.cancel();
     super.dispose();
   }

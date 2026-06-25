@@ -11,6 +11,12 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/api_service.dart';
 import '../../../../core/auth/auth_provider.dart';
+import '../../tasks/models/system_task.dart';
+import '../../tasks/providers/task_provider.dart';
+import '../../projects/models/project.dart';
+import '../../projects/providers/project_provider.dart';
+import '../../teams/presentation/teams_screen.dart';
+import 'package:flutter/gestures.dart';
 
 String _generate6DigitCode() {
   final random = Random();
@@ -117,6 +123,58 @@ class RoadmapSession {
   );
 }
 
+RoadmapSession mapSystemTaskToSession(SystemTask task) {
+  String mapPriority(TaskPriority p) {
+    switch (p) {
+      case TaskPriority.critical: return 'Critical';
+      case TaskPriority.high: return 'High';
+      case TaskPriority.low: return 'Low';
+      default: return 'Medium';
+    }
+  }
+
+  final steps = task.roadmapSteps;
+  final totalSteps = steps.length;
+  
+  final taskStart = task.startDate ?? DateTime.now();
+  final taskEnd = task.endDate ?? taskStart.add(Duration(hours: max(1, totalSteps)));
+  final totalDuration = taskEnd.difference(taskStart);
+  final stepDuration = totalSteps > 0 
+      ? Duration(minutes: (totalDuration.inMinutes / totalSteps).floor())
+      : const Duration(hours: 1);
+
+  final List<HourlyTask> hourlyTasks = [];
+  for (int i = 0; i < totalSteps; i++) {
+    final step = steps[i];
+    final stepStart = step.startTime ?? taskStart.add(stepDuration * i);
+    final stepEnd = step.endTime ?? stepStart.add(stepDuration);
+    
+    hourlyTasks.add(HourlyTask(
+      id: step.id,
+      startTime: stepStart,
+      endTime: stepEnd,
+      title: step.title,
+      description: step.description,
+      priority: step.priority,
+      status: step.status, // Use the 3-state status directly
+      isLocked: step.isLocked,
+      taskCode: 'STP-${task.taskNumber.replaceAll('TSK-', '')}-${i + 1}',
+    ));
+  }
+
+  return RoadmapSession(
+    id: task.id,
+    sessionLabel: task.title,
+    objective: task.description.isNotEmpty ? task.description : 'No description provided.',
+    tasks: hourlyTasks,
+    createdAt: task.createdAt ?? DateTime.now(),
+    updatedAt: task.updatedAt ?? DateTime.now(),
+    status: task.isArchived ? 'Draft' : 'Active',
+    author: task.author,
+    sessionCode: task.taskNumber,
+  );
+}
+
 class BriefRoadmapScreen extends ConsumerStatefulWidget {
   const BriefRoadmapScreen({super.key});
 
@@ -131,6 +189,100 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
   final List<RoadmapSession> _recycledSessions = [];
   bool _isLoading = false;
   String _searchQuery = '';
+  // Session status filter — 'All' | 'Active' | 'Draft'
+  String _statusFilter = 'All';
+  // Company category filter — 'all' means no filter, otherwise holds company id as string
+  String _selectedCompanyFilter = 'all';
+  final ScrollController _teamScrollCtrl = ScrollController();
+  final Set<String> _expandedSessionIds = {};
+
+  Widget _buildSessionObjective(String text, String sessionId, bool isDark) {
+    final style = GoogleFonts.outfit(
+      fontSize: 11.5,
+      color: isDark ? Colors.white54 : Colors.black54,
+      fontWeight: FontWeight.w500,
+      height: 1.3,
+    );
+    final words = text.split(RegExp(r'\s+'));
+    const int wordLimit = 40; // Same as records page
+    if (words.length <= wordLimit) {
+      return Text(text, style: style);
+    }
+
+    final isExpanded = _expandedSessionIds.contains(sessionId);
+    final displayText = isExpanded ? text : '${words.take(wordLimit).join(' ')}...';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(displayText, style: style),
+        const SizedBox(height: 4),
+        InkWell(
+          onTap: () {
+            setState(() {
+              if (isExpanded) {
+                _expandedSessionIds.remove(sessionId);
+              } else {
+                _expandedSessionIds.add(sessionId);
+              }
+            });
+          },
+          child: Text(
+            isExpanded ? 'Collapse' : 'See more',
+            style: GoogleFonts.outfit(
+              color: const Color(0xFF6366F1), // primary color
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimelineTaskDescription(String text, String taskId, bool isDark) {
+    final style = GoogleFonts.outfit(
+      fontSize: 9.5,
+      color: isDark ? Colors.white38 : Colors.black38,
+      fontWeight: FontWeight.w400,
+      height: 1.4,
+    );
+    final words = text.split(RegExp(r'\s+'));
+    const int wordLimit = 40; // Same as records page
+    if (words.length <= wordLimit) {
+      return Text(text, style: style);
+    }
+
+    final isExpanded = _expandedSessionIds.contains(taskId);
+    final displayText = isExpanded ? text : '${words.take(wordLimit).join(' ')}...';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(displayText, style: style),
+        const SizedBox(height: 4),
+        InkWell(
+          onTap: () {
+            setState(() {
+              if (isExpanded) {
+                _expandedSessionIds.remove(taskId);
+              } else {
+                _expandedSessionIds.add(taskId);
+              }
+            });
+          },
+          child: Text(
+            isExpanded ? 'Collapse' : 'See more',
+            style: GoogleFonts.outfit(
+              color: const Color(0xFF6366F1), // primary color
+              fontSize: 8.5,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   bool get _isAdmin => ref.read(authProvider).canCreateItems;
 
@@ -141,28 +293,17 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
     _loadRoadmapData();
   }
 
+  @override
+  void dispose() {
+    _teamScrollCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadRoadmapData() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      final api = ref.read(apiServiceProvider);
-      final sessionsDynamic = await api.get('/roadmap/sessions');
-      final recycledDynamic = await api.get('/roadmap/sessions/trashed');
-      
-      if (!mounted) return;
-      setState(() {
-        if (sessionsDynamic is List) {
-          _roadmapSessions = sessionsDynamic.map((s) => RoadmapSession.fromJson(s)).toList();
-        } else {
-          _roadmapSessions = [];
-        }
-        if (recycledDynamic is List) {
-          _recycledSessions.clear();
-          _recycledSessions.addAll(recycledDynamic.map((s) => RoadmapSession.fromJson(s)));
-        } else {
-          _recycledSessions.clear();
-        }
-      });
+      await ref.read(taskProvider).syncWithDatabase();
     } catch (e) {
       debugPrint('Error loading roadmap data: $e');
     } finally {
@@ -175,6 +316,147 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
   Future<void> _saveRoadmapData() async {
     // Deprecated: Data is now securely stored in MySQL via API calls.
   }
+
+  // ─────────────────────────────────────────────────────────
+  // COMPANY CATEGORY BAR
+  // Full-width horizontal scrollable chip row below search bar.
+  // Supports mouse-wheel and touch drag. Filters sessions by company.
+  // ─────────────────────────────────────────────────────────
+  Widget _buildCompanyCategoryBar(bool isDark, Color primary) {
+    final teamsAsync = ref.watch(teamsProvider);
+
+    return teamsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (response) {
+        final teams = response.teams;
+        if (teams.isEmpty) return const SizedBox.shrink();
+
+        // Extract deduplicated list of active companies under all admin's teams
+        final uniqueCompanies = <int, TeamCompany>{};
+        for (final team in teams) {
+          for (final company in team.companies) {
+            uniqueCompanies[company.id] = company;
+          }
+        }
+        final companyList = uniqueCompanies.values.toList();
+        if (companyList.isEmpty) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+          child: SizedBox(
+            width: double.infinity,
+            child: Listener(
+              // Mouse wheel horizontal scroll
+              onPointerSignal: (event) {
+                if (event is PointerScrollEvent) {
+                  final offset = _teamScrollCtrl.offset + event.scrollDelta.dy;
+                  _teamScrollCtrl.animateTo(
+                    offset.clamp(0.0, _teamScrollCtrl.position.maxScrollExtent),
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                  );
+                }
+              },
+              child: SingleChildScrollView(
+                controller: _teamScrollCtrl,
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: [
+                    // ── "All Companies" chip ────────────────────────────
+                    _buildCompanyChip(
+                      label: 'All Companies',
+                      companyId: 'all',
+                      icon: Icons.business_center_rounded,
+                      isSelected: _selectedCompanyFilter == 'all',
+                      color: primary,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(width: 8),
+                    // ── One chip per company ─────────────────────────────
+                    ...companyList.asMap().entries.expand((entry) {
+                      final i = entry.key;
+                      final company = entry.value;
+                      final chipColors = [
+                        const Color(0xFF6366F1), // indigo
+                        const Color(0xFF10B981), // emerald
+                        const Color(0xFFF59E0B), // amber
+                        const Color(0xFFEC4899), // pink
+                        const Color(0xFF3B82F6), // blue
+                        const Color(0xFF8B5CF6), // violet
+                      ];
+                      final color = chipColors[i % chipColors.length];
+                      return [
+                        _buildCompanyChip(
+                          label: company.name,
+                          companyId: company.id.toString(),
+                          icon: Icons.apartment_rounded,
+                          isSelected: _selectedCompanyFilter == company.id.toString(),
+                          color: color,
+                          isDark: isDark,
+                        ),
+                        const SizedBox(width: 8),
+                      ];
+                    }),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCompanyChip({
+    required String label,
+    required String companyId,
+    required bool isSelected,
+    required Color color,
+    required bool isDark,
+    required IconData icon,
+  }) {
+    return GestureDetector(
+      onTap: () => setState(() => _selectedCompanyFilter = companyId),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? color : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02)),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? color : (isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06)),
+            width: isSelected ? 1.5 : 1.0,
+          ),
+          boxShadow: isSelected
+              ? [BoxShadow(color: color.withOpacity(0.25), blurRadius: 8, offset: const Offset(0, 2))]
+              : [],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: isSelected ? Colors.white : (isDark ? Colors.white54 : Colors.black54),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontSize: 11.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   void _showErrorSnackBar(BuildContext context, String message) {
     ScaffoldMessenger.of(context).clearSnackBars();
@@ -317,9 +599,6 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
   }
 
   void _showAddSessionDialog(BuildContext context, bool isDark) {
-    final sessionLabelCtrl = TextEditingController();
-    final objectiveCtrl = TextEditingController();
-
     showDialog(
       context: context,
       builder: (ctx) {
@@ -338,65 +617,14 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
               'Add Roadmap Session',
               style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: textColor),
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: sessionLabelCtrl,
-                  style: GoogleFonts.outfit(color: textColor, fontSize: 13),
-                  decoration: InputDecoration(
-                    labelText: 'Session Title (e.g. Session 4: Final Verification)',
-                    labelStyle: GoogleFonts.outfit(color: Colors.grey, fontSize: 12),
-                    focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF6366F1))),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: objectiveCtrl,
-                  maxLines: 2,
-                  style: GoogleFonts.outfit(color: textColor, fontSize: 13),
-                  decoration: InputDecoration(
-                    labelText: 'Objective / Goal',
-                    labelStyle: GoogleFonts.outfit(color: Colors.grey, fontSize: 12),
-                    focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF6366F1))),
-                  ),
-                ),
-              ],
+            content: Text(
+              'Roadmap Sessions are automatically created when you register tasks with execution roadmaps in the Workplace Console.\n\nPlease navigate to the Workplace or Tasks section to register new tasks.',
+              style: GoogleFonts.outfit(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, height: 1.4),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey, fontWeight: FontWeight.w600, fontSize: 13)),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (sessionLabelCtrl.text.trim().isNotEmpty) {
-                    final now = DateTime.now();
-                    final newSession = RoadmapSession(
-                      id: 'session_${now.millisecondsSinceEpoch}',
-                      sessionLabel: sessionLabelCtrl.text.trim(),
-                      objective: objectiveCtrl.text.trim(),
-                      tasks: [],
-                      createdAt: now,
-                      updatedAt: now,
-                      status: 'Active',
-                    );
-                    Navigator.pop(ctx);
-                    try {
-                      final api = ref.read(apiServiceProvider);
-                      await api.post('/roadmap/sessions', newSession.toJson());
-                      _loadRoadmapData();
-                    } catch (e) {
-                      debugPrint('Error creating session: $e');
-                      _showErrorSnackBar(context, 'Failed to create session: $e');
-                    }
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6366F1),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Text('Create', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                child: Text('Close', style: GoogleFonts.outfit(color: Colors.grey, fontWeight: FontWeight.w600, fontSize: 13)),
               ),
             ],
           ),
@@ -530,13 +758,12 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                       if (titleCtrl.text.trim().isNotEmpty) {
                         Navigator.pop(ctx);
                         try {
-                          final api = ref.read(apiServiceProvider);
-                          await api.put('/roadmap/sessions/${session.id}', {
-                            'sessionLabel': titleCtrl.text.trim(),
-                            'objective': objectiveCtrl.text.trim(),
-                            'status': status,
-                          });
-                          _loadRoadmapData();
+                          final targetTask = ref.read(taskProvider).allTasks.firstWhere((t) => t.id == session.id);
+                          final updatedTask = targetTask.copyWith(
+                            title: titleCtrl.text.trim(),
+                            description: objectiveCtrl.text.trim(),
+                          );
+                          await ref.read(taskProvider).updateTask(updatedTask);
                         } catch (e) {
                           debugPrint('Error updating session config: $e');
                           _showErrorSnackBar(context, 'Failed to update session config: $e');
@@ -588,9 +815,7 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                 onPressed: () async {
                   Navigator.pop(ctx);
                   try {
-                    final api = ref.read(apiServiceProvider);
-                    await api.delete('/roadmap/sessions/${session.id}');
-                    _loadRoadmapData();
+                    await ref.read(taskProvider).removeTask(session.id);
                     
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).clearSnackBars();
@@ -606,8 +831,7 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                           textColor: Colors.white,
                           onPressed: () async {
                             try {
-                              await api.post('/roadmap/sessions/${session.id}/restore', {});
-                              _loadRoadmapData();
+                              await ref.read(taskProvider).restoreTask(session.id);
                             } catch (err) {
                               debugPrint('Error restoring session: $err');
                             }
@@ -702,9 +926,10 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                                     onPressed: () async {
                                       Navigator.pop(confirmCtx);
                                       try {
-                                        final api = ref.read(apiServiceProvider);
-                                        await api.delete('/roadmap/sessions/empty-trash');
-                                        _loadRoadmapData();
+                                        final trashed = [...ref.read(taskProvider).trashedTasks];
+                                        for (var task in trashed) {
+                                          await ref.read(taskProvider).forceDeleteTask(task.id);
+                                        }
                                         setDialogState(() {});
                                       } catch (e) {
                                         debugPrint('Error emptying Recycle Bin: $e');
@@ -820,9 +1045,7 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                                               tooltip: 'Restore',
                                               onPressed: () async {
                                                 try {
-                                                  final api = ref.read(apiServiceProvider);
-                                                  await api.post('/roadmap/sessions/${session.id}/restore', {});
-                                                  _loadRoadmapData();
+                                                  await ref.read(taskProvider).restoreTask(session.id);
                                                   setDialogState(() {});
                                                   ScaffoldMessenger.of(context).showSnackBar(
                                                     SnackBar(
@@ -858,9 +1081,7 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                                                           onPressed: () async {
                                                             Navigator.pop(deleteCtx);
                                                             try {
-                                                              final api = ref.read(apiServiceProvider);
-                                                              await api.delete('/roadmap/sessions/${session.id}/force-delete');
-                                                              _loadRoadmapData();
+                                                              await ref.read(taskProvider).forceDeleteTask(session.id);
                                                               setDialogState(() {});
                                                               ScaffoldMessenger.of(context).showSnackBar(
                                                                 SnackBar(
@@ -1078,23 +1299,22 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                     onPressed: isTimeValid
                         ? () async {
                             if (titleCtrl.text.trim().isNotEmpty) {
-                              final newTask = HourlyTask(
-                                id: 'task_${DateTime.now().millisecondsSinceEpoch}',
-                                startTime: startDateTime,
-                                endTime: endDateTime,
+                              final newStep = RoadmapStep(
+                                id: 'step_${DateTime.now().millisecondsSinceEpoch}',
                                 title: titleCtrl.text.trim(),
                                 description: descCtrl.text.trim(),
-                                priority: priority,
-                                status: status,
+                                status: 'Process',
                               );
                               Navigator.pop(ctx);
                               try {
-                                final api = ref.read(apiServiceProvider);
-                                await api.post('/roadmap/sessions/${roadmap.id}/tasks', newTask.toJson());
-                                _loadRoadmapData();
+                                final targetTask = ref.read(taskProvider).allTasks.firstWhere((t) => t.id == roadmap.id);
+                                final updatedTask = targetTask.copyWith(
+                                  roadmapSteps: [...targetTask.roadmapSteps, newStep],
+                                );
+                                await ref.read(taskProvider).updateTask(updatedTask);
                               } catch (e) {
-                                debugPrint('Error adding task: $e');
-                                _showErrorSnackBar(context, 'Failed to add task: $e');
+                                debugPrint('Error adding task step: $e');
+                                _showErrorSnackBar(context, 'Failed to add task step: $e');
                               }
                             }
                           }
@@ -1132,6 +1352,8 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final isTimeValid = endDateTime.isAfter(startDateTime);
+            final bool isConfigLocked = task.isLocked && roadmap.status == 'Active';
+
             return BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: AlertDialog(
@@ -1154,9 +1376,39 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Warning banner if locked
+                      if (isConfigLocked)
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.lock_rounded, size: 16, color: Colors.redAccent),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'This execution step is locked. To modify or unlock it, make this session Private/Draft first.',
+                                  style: GoogleFonts.outfit(
+                                    color: Colors.redAccent, 
+                                    fontSize: 11, 
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
                       // Edit Title
                       TextField(
                         controller: titleCtrl,
+                        enabled: !isConfigLocked,
                         style: GoogleFonts.outfit(color: textColor, fontSize: 13),
                         decoration: InputDecoration(
                           labelText: 'Task Title',
@@ -1169,6 +1421,7 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                       // Edit Description
                       TextField(
                         controller: descCtrl,
+                        enabled: !isConfigLocked,
                         style: GoogleFonts.outfit(color: textColor, fontSize: 13),
                         decoration: InputDecoration(
                           labelText: 'Short Description',
@@ -1182,12 +1435,14 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                       Text('Start Date & Time', style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       InkWell(
-                        onTap: () async {
-                          final picked = await _selectDateTime(context, startDateTime, isDark);
-                          if (picked != null) {
-                            setDialogState(() => startDateTime = picked);
-                          }
-                        },
+                        onTap: isConfigLocked
+                            ? null
+                            : () async {
+                                final picked = await _selectDateTime(context, startDateTime, isDark);
+                                if (picked != null) {
+                                  setDialogState(() => startDateTime = picked);
+                                }
+                              },
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1214,12 +1469,14 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                       Text('End Date & Time', style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       InkWell(
-                        onTap: () async {
-                          final picked = await _selectDateTime(context, endDateTime, isDark);
-                          if (picked != null) {
-                            setDialogState(() => endDateTime = picked);
-                          }
-                        },
+                        onTap: isConfigLocked
+                            ? null
+                            : () async {
+                                final picked = await _selectDateTime(context, endDateTime, isDark);
+                                if (picked != null) {
+                                  setDialogState(() => endDateTime = picked);
+                                }
+                              },
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1265,9 +1522,11 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                             items: ['Low', 'Medium', 'High', 'Critical']
                                 .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                                 .toList(),
-                            onChanged: (val) {
-                              if (val != null) setDialogState(() => priority = val);
-                            },
+                            onChanged: isConfigLocked
+                                ? null
+                                : (val) {
+                                    if (val != null) setDialogState(() => priority = val);
+                                  },
                           ),
                         ],
                       ),
@@ -1285,9 +1544,11 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                         value: isLockedState,
                         activeColor: Colors.redAccent,
                         contentPadding: EdgeInsets.zero,
-                        onChanged: (val) {
-                          setDialogState(() => isLockedState = val);
-                        },
+                        onChanged: isConfigLocked
+                            ? null
+                            : (val) {
+                                setDialogState(() => isLockedState = val);
+                              },
                       ),
 
                       const SizedBox(height: 12),
@@ -1315,24 +1576,30 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                     child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey, fontWeight: FontWeight.w600, fontSize: 13)),
                   ),
                   ElevatedButton(
-                    onPressed: isTimeValid
+                    onPressed: isTimeValid && !isConfigLocked
                         ? () async {
                             if (titleCtrl.text.trim().isNotEmpty) {
                               Navigator.pop(ctx);
                               try {
-                                final api = ref.read(apiServiceProvider);
-                                await api.put('/roadmap/tasks/${task.id}', {
-                                  'title': titleCtrl.text.trim(),
-                                  'description': descCtrl.text.trim(),
-                                  'startTime': startDateTime.toIso8601String(),
-                                  'endTime': endDateTime.toIso8601String(),
-                                  'priority': priority,
-                                  'isLocked': isLockedState,
-                                });
-                                _loadRoadmapData();
+                                final targetTask = ref.read(taskProvider).allTasks.firstWhere((t) => t.id == roadmap.id);
+                                final updatedSteps = targetTask.roadmapSteps.map((step) {
+                                  if (step.id == task.id) {
+                                    return step.copyWith(
+                                      title: titleCtrl.text.trim(),
+                                      description: descCtrl.text.trim(),
+                                      priority: priority,
+                                      startTime: startDateTime,
+                                      endTime: endDateTime,
+                                      isLocked: isLockedState,
+                                    );
+                                  }
+                                  return step;
+                                }).toList();
+                                final updatedTask = targetTask.copyWith(roadmapSteps: updatedSteps);
+                                await ref.read(taskProvider).updateTask(updatedTask);
                               } catch (e) {
-                                debugPrint('Error updating task: $e');
-                                _showErrorSnackBar(context, 'Failed to update task config: $e');
+                                debugPrint('Error updating task step: $e');
+                                _showErrorSnackBar(context, 'Failed to update task step config: $e');
                               }
                             }
                           }
@@ -1342,7 +1609,7 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                       disabledBackgroundColor: isDark ? Colors.white10 : Colors.black12,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text('Save Configurations', style: GoogleFonts.outfit(color: isTimeValid ? Colors.white : Colors.grey, fontWeight: FontWeight.bold, fontSize: 13)),
+                    child: Text('Save Configurations', style: GoogleFonts.outfit(color: isTimeValid && !isConfigLocked ? Colors.white : Colors.grey, fontWeight: FontWeight.bold, fontSize: 13)),
                   ),
                 ],
               ),
@@ -1383,12 +1650,13 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                 onPressed: () async {
                   Navigator.pop(ctx);
                   try {
-                    final api = ref.read(apiServiceProvider);
-                    await api.delete('/roadmap/tasks/${task.id}');
-                    _loadRoadmapData();
+                    final targetTask = ref.read(taskProvider).allTasks.firstWhere((t) => t.id == roadmap.id);
+                    final updatedSteps = targetTask.roadmapSteps.where((step) => step.id != task.id).toList();
+                    final updatedTask = targetTask.copyWith(roadmapSteps: updatedSteps);
+                    await ref.read(taskProvider).updateTask(updatedTask);
                   } catch (e) {
-                    debugPrint('Error deleting task: $e');
-                    _showErrorSnackBar(context, 'Failed to delete task: $e');
+                    debugPrint('Error deleting task step: $e');
+                    _showErrorSnackBar(context, 'Failed to delete task step: $e');
                   }
                 },
                 style: ElevatedButton.styleFrom(
@@ -1770,9 +2038,56 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
 
     final isAdmin = ref.watch(authProvider).canCreateItems;
 
+    final taskState = ref.watch(taskProvider);
+    final activeTasks = taskState.allTasks;
+    _roadmapSessions = activeTasks.map((t) => mapSystemTaskToSession(t)).toList();
+
+    final trashedTasks = taskState.trashedTasks;
+    _recycledSessions.clear();
+    _recycledSessions.addAll(trashedTasks.map((t) => mapSystemTaskToSession(t)));
+
     final visibleSessions = _roadmapSessions.where((session) {
-      if (isAdmin) return true; // Admins see all (both Active & Draft/Private)
-      return session.status == 'Active'; // Team members see only Active
+      if (_statusFilter == 'Active' && session.status != 'Active') return false;
+      if (_statusFilter == 'Draft' && session.status != 'Draft') return false;
+
+      final matchesScope = isAdmin ? true : session.status == 'Active';
+      if (!matchesScope) return false;
+
+      // ── Company filter ─────────────────────────────────────────────────────
+      if (_selectedCompanyFilter != 'all') {
+        final projectState = ref.read(projectProvider).valueOrNull;
+        if (projectState != null) {
+          // Find the underlying SystemTask for this session
+          final sysTask = ref.read(taskProvider).allTasks
+              .where((t) => t.id == session.id)
+              .firstOrNull;
+          if (sysTask != null && sysTask.projectId != null) {
+            // Find the project linked to the task
+            final project = projectState
+                .where((p) => p.id == sysTask.projectId)
+                .firstOrNull;
+            if (project == null || project.companyId != _selectedCompanyFilter) {
+              return false;
+            }
+          } else {
+            return false; // Filter out if no task or projectId
+          }
+        }
+      }
+
+      if (_searchQuery.trim().isEmpty) return true;
+
+      final query = _searchQuery.trim().toLowerCase();
+      final titleMatches = session.sessionLabel.toLowerCase().contains(query);
+      final descMatches = session.objective.toLowerCase().contains(query);
+      final codeMatches = session.sessionCode.toLowerCase().contains(query);
+      final taskMatches = session.tasks.any((t) =>
+        t.title.toLowerCase().contains(query) ||
+        t.description.toLowerCase().contains(query) ||
+        t.taskCode.toLowerCase().contains(query)
+      );
+
+      return titleMatches || descMatches || codeMatches || taskMatches;
     }).toList();
 
     return Scaffold(
@@ -1813,87 +2128,138 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header (Dense Layout)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'DAILY SCHEDULE ROADMAP',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    color: primary,
-                                    letterSpacing: 1.5,
-                                  ),
+                  // Header Row with Search bar, Recycle Bin and Filter
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Row(
+                      children: [
+                        // Search Input Bar (styled like company list page search bar)
+                        Expanded(
+                          child: Container(
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                            ),
+                            child: TextField(
+                              onChanged: (val) {
+                                setState(() {
+                                  _searchQuery = val;
+                                });
+                              },
+                              style: TextStyle(color: textColor, fontSize: 13),
+                              textAlignVertical: TextAlignVertical.center,
+                              decoration: InputDecoration(
+                                hintText: 'Search roadmap sessions and tasks...',
+                                hintStyle: TextStyle(
+                                  color: isDark ? Colors.white38 : Colors.black38,
+                                  fontSize: 12,
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '24-Hour Operations Timeline',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                    color: textColor,
-                                    height: 1.1,
-                                  ),
+                                prefixIcon: Icon(
+                                  IconsaxPlusLinear.search_normal_1,
+                                  size: 16,
+                                  color: isDark ? Colors.white38 : Colors.black38,
+                                ),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Recycle Bin Icon (Admin only)
+                        if (isAdmin) ...[
+                          Tooltip(
+                            message: 'Recycle Bin',
+                            child: InkWell(
+                              onTap: () => _showRecycleBinDialog(context, isDark),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+                                ),
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  alignment: Alignment.center,
+                                  children: [
+                                    const Icon(IconsaxPlusBold.trash, color: Colors.redAccent, size: 16),
+                                    if (_recycledSessions.isNotEmpty)
+                                      Positioned(
+                                        right: -4,
+                                        top: -4,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                          decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
+                                          child: Text(
+                                            '${_recycledSessions.length}',
+                                            style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                          ),
+                                        ).animate().shake(),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        // Filter Icon
+                        Tooltip(
+                          message: 'Filter status',
+                          child: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                            ),
+                            child: PopupMenuButton<String>(
+                              icon: Icon(
+                                Icons.filter_list_rounded,
+                                size: 16,
+                                color: isDark ? Colors.white70 : Colors.black87,
+                              ),
+                              tooltip: 'Filter Status',
+                              onSelected: (val) {
+                                setState(() {
+                                  _statusFilter = val;
+                                });
+                              },
+                              color: isDark ? const Color(0xFF09090D) : Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              itemBuilder: (ctx) => [
+                                PopupMenuItem(
+                                  value: 'All',
+                                  child: Text('All Statuses', style: GoogleFonts.outfit(color: textColor, fontSize: 13)),
+                                ),
+                                PopupMenuItem(
+                                  value: 'Active',
+                                  child: Text('Active Only', style: GoogleFonts.outfit(color: textColor, fontSize: 13)),
+                                ),
+                                PopupMenuItem(
+                                  value: 'Draft',
+                                  child: Text('Draft Only', style: GoogleFonts.outfit(color: textColor, fontSize: 13)),
                                 ),
                               ],
                             ),
                           ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Search icon — always visible, left of Recycle Bin
-                              IconButton(
-                                icon: Icon(
-                                  Icons.search_rounded,
-                                  size: 20,
-                                  color: textColor.withOpacity(0.7),
-                                ),
-                                tooltip: 'Search Sessions & Tasks',
-                                onPressed: () =>
-                                    _showSearchOverlay(context, isDark),
-                              ),
-                              if (isAdmin) ...[
-                                IconButton(
-                                  icon: Badge(
-                                    isLabelVisible: _recycledSessions.isNotEmpty,
-                                    label: Text(
-                                      '${_recycledSessions.length}',
-                                      style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold),
-                                    ),
-                                    backgroundColor: Colors.redAccent,
-                                    child: Icon(IconsaxPlusLinear.trash, size: 20, color: textColor.withOpacity(0.7)),
-                                  ),
-                                  tooltip: 'Recycle Bin',
-                                  onPressed: () => _showRecycleBinDialog(context, isDark),
-                                ),
-                                const SizedBox(width: 8),
-                                // Add Session Button
-                                ElevatedButton.icon(
-                                  onPressed: () => _showAddSessionDialog(context, isDark),
-                                  icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                                  label: Text('Add Session', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: primary,
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    elevation: 0,
-                                  ),
-                                ).animate().scale(begin: const Offset(0.9, 0.9)),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
+                  ),
 
-                    // Main Timeline Cards Container - FULL WIDTH, ONE BY ONE LIST (Single Column)
+                  // ── Company Category Bar ──────────────────────────────────
+                  // Full-width horizontal scroll. Filters sessions by company.
+                  _buildCompanyCategoryBar(isDark, primary),
+
+                  // Main Timeline Cards Container - FULL WIDTH, ONE BY ONE LIST (Single Column)
                     Expanded(
                       child: _isLoading && _roadmapSessions.isEmpty
                           ? Center(
@@ -1939,6 +2305,33 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
 
     final isLatestSession = _roadmapSessions.isNotEmpty && roadmap == _roadmapSessions.first;
 
+    final projects = ref.watch(projectProvider).maybeWhen(
+      data: (d) => d,
+      orElse: () => <Project>[],
+    );
+    final tasks = ref.watch(taskProvider).allTasks;
+    final taskMatches = tasks.where((t) => t.id == roadmap.id);
+    SystemTask? targetTask;
+    Project? linkedProject;
+    Plan? linkedPlan;
+    
+    if (taskMatches.isNotEmpty) {
+      final t = taskMatches.first;
+      targetTask = t;
+      if (t.projectId != null) {
+        final matches = projects.where((p) => p.id == t.projectId);
+        if (matches.isNotEmpty) {
+          linkedProject = matches.first;
+          if (t.planId != null) {
+            final planMatches = linkedProject.plans.where((p) => p.id == t.planId);
+            if (planMatches.isNotEmpty) {
+              linkedPlan = planMatches.first;
+            }
+          }
+        }
+      }
+    }
+
     return Container(
       width: double.infinity, // Ensures full-width behavior
       decoration: BoxDecoration(
@@ -1959,7 +2352,7 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
         children: [
           // Session Header
           Container(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
@@ -1970,6 +2363,18 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (linkedProject != null) ...[
+                  Text(
+                    '${linkedProject.companyName ?? 'Company'}  /  ${linkedProject.name}  /  ${linkedPlan != null ? "${linkedPlan.title} (${linkedPlan.icode})" : "Private Plan"}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.bold,
+                      color: primary.withOpacity(0.8),
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                ],
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1977,12 +2382,19 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              roadmap.sessionLabel,
-                              style: GoogleFonts.outfit(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w800,
-                                color: textColor,
+                            child: GestureDetector(
+                              onTap: () {
+                                if (ref.read(authProvider).canCreateItems) {
+                                  _showSessionConfigDialog(context, roadmap, isDark);
+                                }
+                              },
+                              child: Text(
+                                roadmap.sessionLabel,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: textColor,
+                                ),
                               ),
                             ),
                           ),
@@ -2035,7 +2447,7 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                               Clipboard.setData(ClipboardData(text: roadmap.sessionCode));
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Session Code ${roadmap.sessionCode} copied to clipboard', style: GoogleFonts.outfit(fontSize: 12)),
+                                  content: Text('Task Code ${roadmap.sessionCode} copied to clipboard', style: GoogleFonts.outfit(fontSize: 12)),
                                   duration: const Duration(milliseconds: 800),
                                   backgroundColor: const Color(0xFF6366F1),
                                 ),
@@ -2077,44 +2489,8 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                       ),
                       const SizedBox(width: 12),
                     ],
-                    // Conditionally show add task button if newest/latest session and Admin
-                    if (_isAdmin && isLatestSession)
-                      InkWell(
-                        onTap: () => _showAddTaskDialog(context, roadmap, isDark),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: primary.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.add_rounded, size: 14, color: primary),
-                              const SizedBox(width: 4),
-                              Text('Task', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: primary)),
-                            ],
-                          ),
-                        ),
-                      )
-                    else if (_isAdmin)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.lock_rounded, size: 10, color: isDark ? Colors.white30 : Colors.black38),
-                            const SizedBox(width: 4),
-                            Text('Read-Only (Tasks Locked)', style: GoogleFonts.outfit(fontSize: 8.5, color: isDark ? Colors.white30 : Colors.black38, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      )
-                    else
+                    // Removed Add Task Button since step creation is moved elsewhere
+                    if (!_isAdmin)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
@@ -2130,19 +2506,31 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                           ],
                         ),
                       ),
+                    const SizedBox(width: 12),
+                    // Collapse Toggle Icon (Exclusive toggle area)
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          if (_expandedSessionIds.contains(roadmap.id)) {
+                            _expandedSessionIds.remove(roadmap.id);
+                          } else {
+                            _expandedSessionIds.add(roadmap.id);
+                          }
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Icon(
+                          _expandedSessionIds.contains(roadmap.id) ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                          size: 20,
+                          color: isDark ? Colors.white54 : Colors.black54,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  roadmap.objective,
-                  style: GoogleFonts.outfit(
-                    fontSize: 11.5,
-                    color: isDark ? Colors.white54 : Colors.black54,
-                    fontWeight: FontWeight.w500,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
 
                 // Created, Updated Times & Author
                 Wrap(
@@ -2234,10 +2622,12 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
               ],
             ),
           ),
-
           // Scrollable Dense List of Tasks (Built directly inside the column of the Day Card)
-          roadmap.tasks.isEmpty
-              ? Padding(
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 300),
+            crossFadeState: _expandedSessionIds.contains(roadmap.id) ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+            firstChild: roadmap.tasks.isEmpty
+                ? Padding(
                   padding: const EdgeInsets.symmetric(vertical: 32.0),
                   child: Center(
                     child: Column(
@@ -2262,6 +2652,8 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                     }).toList(),
                   ),
                 ),
+            secondChild: const SizedBox(width: double.infinity, height: 0),
+          ),
         ],
       ),
     ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0);
@@ -2289,44 +2681,120 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
   Widget _buildTaskTimelineItem(RoadmapSession roadmap, HourlyTask task, bool isDark, Color primary, Color textColor) {
     final priorityColor = _getPriorityColor(task.priority);
     final statusColor = _getStatusColor(task.status);
-    final statusIcon = _getStatusIcon(task.status);
+    final lineColor = isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04);
+    final bool isMobile = MediaQuery.of(context).size.width < 500;
+
+    final titleWidget = GestureDetector(
+      onTap: () {
+        if (ref.read(authProvider).canCreateItems) {
+          _showTaskConfigDialog(context, roadmap, task, isDark);
+        }
+      },
+      child: Text(
+        task.title,
+        style: GoogleFonts.outfit(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+          color: task.status == 'Complete' ? Colors.grey : (isDark ? Colors.white : Colors.black87),
+          decoration: task.status == 'Complete' ? TextDecoration.lineThrough : null,
+        ),
+      ),
+    );
+
+    final actionsRow = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (ref.read(authProvider).canCreateItems) ...[
+          IconButton(
+            icon: Icon(IconsaxPlusLinear.setting_2, size: 16, color: isDark ? Colors.white54 : Colors.black54),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: () => _showTaskConfigDialog(context, roadmap, task, isDark),
+          ),
+          const SizedBox(width: 8),
+          _buildStatusIndicatorBtn(context, roadmap, task, 'Complete', const Color(0xFF10B981)),
+          const SizedBox(width: 4),
+          _buildStatusIndicatorBtn(context, roadmap, task, 'Process', const Color(0xFF6366F1)),
+          const SizedBox(width: 4),
+          _buildStatusIndicatorBtn(context, roadmap, task, 'Hold', const Color(0xFFF59E0B)),
+        ],
+      ],
+    );
 
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Small vertical line with timeline indicator dot
-          Column(
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.15),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: statusColor,
-                    width: 2,
+          // Timeline indicator (Stitched cleanly without gaps)
+          SizedBox(
+            width: 24,
+            child: Column(
+              children: [
+                // Top stitch
+                Container(width: 2, height: 16, color: lineColor),
+                GestureDetector(
+                  onTap: () async {
+                    if (!_isAdmin) return;
+                    if (task.isLocked && roadmap.status == 'Active') {
+                      _showLockedWarning(context);
+                      return;
+                    }
+                    final newStatus = task.status == 'Process'
+                        ? 'Complete'
+                        : (task.status == 'Complete' ? 'Hold' : 'Process');
+                    try {
+                      final targetTask = ref.read(taskProvider).allTasks.firstWhere((t) => t.id == roadmap.id);
+                      final updatedSteps = targetTask.roadmapSteps.map((step) {
+                        if (step.id == task.id) {
+                          return step.copyWith(status: newStatus);
+                        }
+                        return step;
+                      }).toList();
+                      final updatedTask = targetTask.copyWith(roadmapSteps: updatedSteps);
+                      await ref.read(taskProvider).updateTask(updatedTask);
+                    } catch (e) {
+                      debugPrint('Error updating task status: $e');
+                    }
+                  },
+                  child: Tooltip(
+                    message: !_isAdmin
+                        ? 'Status: ${task.status}'
+                        : (task.isLocked ? 'Locked' : 'Change Status: ${task.status}'),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: task.status == 'Complete'
+                            ? const Color(0xFF10B981)
+                            : (task.status == 'Process' ? const Color(0xFF6366F1).withOpacity(0.12) : const Color(0xFFF59E0B).withOpacity(0.12)),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: statusColor, width: 1.5),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          task.status == 'Complete'
+                              ? Icons.check
+                              : (task.status == 'Process' ? Icons.play_arrow_rounded : Icons.pause),
+                          size: 11,
+                          color: task.status == 'Complete' ? Colors.white : statusColor,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              Expanded(
-                child: Container(
-                  width: 1.0,
-                  color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04),
-                ),
-              ),
-            ],
+                // Bottom stitch
+                Expanded(child: Container(width: 2, color: lineColor)),
+              ],
+            ),
           ),
           const SizedBox(width: 12),
 
           // Task details panel
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4.0),
+              padding: const EdgeInsets.only(bottom: 12.0),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
                   color: isDark ? Colors.white.withOpacity(0.015) : Colors.black.withOpacity(0.01),
                   borderRadius: BorderRadius.circular(12),
@@ -2334,211 +2802,53 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
                     color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03),
                   ),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Custom cyclical status indicator action
-                    GestureDetector(
-                      onTap: () async {
-                        if (!_isAdmin) return; // only admin can change status
-                        if (task.isLocked) {
-                          _showLockedWarning(context);
-                          return;
-                        }
-                        final newStatus = task.status == 'Process'
-                            ? 'Complete'
-                            : (task.status == 'Complete' ? 'Hold' : 'Process');
-                        try {
-                          final api = ref.read(apiServiceProvider);
-                          setState(() {
-                            task.status = newStatus;
-                            roadmap.updatedAt = DateTime.now();
-                          });
-                          await api.put('/roadmap/tasks/${task.id}', {'status': newStatus});
-                          _loadRoadmapData();
-                        } catch (e) {
-                          debugPrint('Error updating task status: $e');
-                        }
-                      },
-                      child: Tooltip(
-                        message: !_isAdmin
-                            ? 'Status: ${task.status}'
-                            : (task.isLocked 
-                                ? 'Locked - Unlock in config' 
-                                : 'Status: ${task.status} (Tap to change)'),
-                        child: Icon(
-                          statusIcon,
-                          size: 18,
-                          color: !_isAdmin 
-                              ? Colors.grey 
-                              : (task.isLocked ? Colors.grey : statusColor),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              // Start - End Timeline Dates
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(IconsaxPlusLinear.calendar, size: 9, color: primary.withOpacity(0.7)),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '${_taskTimeFormat.format(task.startTime)} - ${_taskTimeFormat.format(task.endTime)}',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w800,
-                                      color: primary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              // Priority tag
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: priorityColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  task.priority.toUpperCase(),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 6.5,
-                                    fontWeight: FontWeight.w900,
-                                    color: priorityColor,
-                                  ),
-                                ),
-                              ),
-                              // Status mini tag
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  task.status.toUpperCase(),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 6.5,
-                                    fontWeight: FontWeight.w900,
-                                    color: statusColor,
-                                  ),
-                                ),
-                              ),
-                              // Task Code (Copy on Tap)
-                              InkWell(
-                                onTap: () {
-                                  Clipboard.setData(ClipboardData(text: task.taskCode));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Task Code ${task.taskCode} copied to clipboard', style: GoogleFonts.outfit(fontSize: 12)),
-                                      duration: const Duration(milliseconds: 800),
-                                      backgroundColor: const Color(0xFF6366F1),
-                                    ),
-                                  );
-                                },
-                                borderRadius: BorderRadius.circular(4),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: isDark ? Colors.white10 : Colors.black12, width: 0.5),
-                                  ),
-                                  child: Text(
-                                    task.taskCode,
-                                    style: TextStyle(
-                                      fontFamily: 'monospace',
-                                      fontSize: 7.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: isDark ? Colors.white54 : Colors.black54,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // Locked badge
-                              if (task.isLocked)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: Colors.redAccent.withOpacity(0.12),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.lock_rounded, size: 8, color: Colors.redAccent),
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        'LOCKED',
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 6.5,
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.redAccent,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          // Task Title (unlimited wrap)
-                          Text(
-                            task.title,
-                            style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: task.status == 'Complete'
-                                  ? Colors.grey
-                                  : (isDark ? Colors.white70 : Colors.black87),
-                              decoration: task.status == 'Complete' ? TextDecoration.lineThrough : null,
-                            ),
-                          ),
-                          if (task.description.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            // Task Desc (unlimited wrap)
-                            Text(
-                              task.description,
-                              style: GoogleFonts.outfit(
-                                fontSize: 9.5,
-                                color: Colors.grey,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-
-                    // Config button (gear icon) and quick inline buttons (Admin only)
-                    if (ref.read(authProvider).canCreateItems) ...[
-                      IconButton(
-                        icon: Icon(IconsaxPlusLinear.setting_2, size: 14, color: isDark ? Colors.white38 : Colors.black38),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () => _showTaskConfigDialog(context, roadmap, task, isDark),
-                      ),
-                      const SizedBox(width: 10),
-
-                      // Quick inline change buttons
+                    if (!isMobile)
                       Row(
-                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          _buildStatusIndicatorBtn(context, roadmap, task, 'Complete', const Color(0xFF10B981)),
-                          const SizedBox(width: 4),
-                          _buildStatusIndicatorBtn(context, roadmap, task, 'Process', const Color(0xFF6366F1)),
-                          const SizedBox(width: 4),
-                          _buildStatusIndicatorBtn(context, roadmap, task, 'Hold', const Color(0xFFF59E0B)),
+                          Expanded(
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                titleWidget,
+                                _buildMiniTag('${_taskTimeFormat.format(task.startTime)} - ${_taskTimeFormat.format(task.endTime)}', primary, isDark, icon: IconsaxPlusLinear.calendar),
+                                _buildMiniTag(task.priority.toUpperCase(), priorityColor, isDark),
+                                _buildMiniTag(task.status.toUpperCase(), statusColor, isDark),
+                                _buildMiniTag(task.taskCode, isDark ? Colors.white54 : Colors.black54, isDark, isCode: true),
+                                if (task.isLocked) _buildMiniTag('LOCKED', Colors.redAccent, isDark, icon: Icons.lock_rounded),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          actionsRow,
+                        ],
+                      )
+                    else ...[
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          _buildMiniTag('${_taskTimeFormat.format(task.startTime)} - ${_taskTimeFormat.format(task.endTime)}', primary, isDark, icon: IconsaxPlusLinear.calendar),
+                          _buildMiniTag(task.priority.toUpperCase(), priorityColor, isDark),
+                          _buildMiniTag(task.status.toUpperCase(), statusColor, isDark),
+                          _buildMiniTag(task.taskCode, isDark ? Colors.white54 : Colors.black54, isDark, isCode: true),
+                          if (task.isLocked) _buildMiniTag('LOCKED', Colors.redAccent, isDark, icon: Icons.lock_rounded),
                         ],
                       ),
+                      const SizedBox(height: 6),
+                      titleWidget,
+                      const SizedBox(height: 8),
+                      actionsRow,
+                    ],
+                    if (task.description.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      _buildTimelineTaskDescription(task.description, task.id, isDark),
                     ],
                   ],
                 ),
@@ -2550,35 +2860,74 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
     );
   }
 
+  Widget _buildMiniTag(String text, Color color, bool isDark, {IconData? icon, bool isCode = false}) {
+    final child = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: isCode ? Border.all(color: isDark ? Colors.white10 : Colors.black12, width: 0.5) : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 8, color: color),
+            const SizedBox(width: 3),
+          ],
+          Text(
+            text,
+            style: isCode 
+              ? TextStyle(fontFamily: 'monospace', fontSize: 7.5, fontWeight: FontWeight.bold, color: color)
+              : GoogleFonts.outfit(fontSize: 7.5, fontWeight: FontWeight.w800, color: color),
+          ),
+        ],
+      ),
+    );
+    if (isCode) {
+      return InkWell(
+        onTap: () {
+          Clipboard.setData(ClipboardData(text: text));
+        },
+        borderRadius: BorderRadius.circular(4),
+        child: child,
+      );
+    }
+    return child;
+  }
+
   Widget _buildStatusIndicatorBtn(BuildContext context, RoadmapSession roadmap, HourlyTask task, String targetStatus, Color color) {
     final isActive = task.status == targetStatus;
-    final isLocked = task.isLocked;
-    
+    final isLocked = task.isLocked && roadmap.status == 'Active';
+
     return InkWell(
-      onTap: isLocked 
-        ? () => _showLockedWarning(context) 
-        : () async {
-            try {
-              final api = ref.read(apiServiceProvider);
-              setState(() {
-                task.status = targetStatus;
-                roadmap.updatedAt = DateTime.now(); // update day card updatedAt time
-              });
-              await api.put('/roadmap/tasks/${task.id}', {'status': targetStatus});
-              _loadRoadmapData();
-            } catch (e) {
-              debugPrint('Error updating task status: $e');
-            }
-          },
+      onTap: isLocked
+          ? () => _showLockedWarning(context)
+          : () async {
+              try {
+                final targetTask = ref.read(taskProvider).allTasks.firstWhere((t) => t.id == roadmap.id);
+                final updatedSteps = targetTask.roadmapSteps.map((step) {
+                  if (step.id == task.id) {
+                    // Persist full 3-state status (not just isCompleted boolean)
+                    return step.copyWith(status: targetStatus);
+                  }
+                  return step;
+                }).toList();
+                final updatedTask = targetTask.copyWith(roadmapSteps: updatedSteps);
+                await ref.read(taskProvider).updateTask(updatedTask);
+              } catch (e) {
+                debugPrint('Error updating task status: $e');
+              }
+            },
       borderRadius: BorderRadius.circular(6),
       child: Opacity(
         opacity: isLocked ? 0.35 : 1.0,
         child: Container(
-          width: 14,
-          height: 14,
+          width: 22,
+          height: 22,
           decoration: BoxDecoration(
             color: isActive ? color : color.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(6),
             border: Border.all(color: color.withOpacity(0.4), width: 0.5),
           ),
           child: Center(
@@ -2586,7 +2935,7 @@ class _BriefRoadmapScreenState extends ConsumerState<BriefRoadmapScreen> {
               targetStatus == 'Complete'
                   ? Icons.check
                   : (targetStatus == 'Process' ? Icons.play_arrow_rounded : Icons.pause),
-              size: 8,
+              size: 12,
               color: isActive ? Colors.white : color,
             ),
           ),

@@ -18,6 +18,7 @@ class Project {
   final List<String> taskIds;
   final List<Plan> plans;
   final bool isApproved;
+  final double allocatedFundsSum;
 
   final double minBudget;
   final double maxBudget;
@@ -49,6 +50,7 @@ class Project {
     this.taskIds = const [],
     this.plans = const [],
     this.isApproved = true,
+    this.allocatedFundsSum = 0.0,
     this.minBudget = 0.0,
     this.maxBudget = 0.0,
     this.managerSignature = '',
@@ -81,6 +83,7 @@ class Project {
       taskIds: List<String>.from(map['task_ids'] ?? map['taskIds'] ?? []),
       plans: List<Plan>.from((map['plans'] as List? ?? []).map((p) => Plan.fromMap(p))),
       isApproved: _parseBool(map['is_approved'] ?? map['isApproved']),
+      allocatedFundsSum: (map['allocated_funds_sum'] ?? map['allocatedFundsSum'] ?? 0.0).toDouble(),
       minBudget: (map['min_budget'] ?? map['minBudget'] ?? 0.0).toDouble(),
       maxBudget: (map['max_budget'] ?? map['maxBudget'] ?? 0.0).toDouble(),
       managerSignature: map['manager_signature'] ?? map['managerSignature'] ?? '',
@@ -120,6 +123,7 @@ class Project {
       taskIds: taskIds,
       plans: plans,
       isApproved: isApproved,
+      allocatedFundsSum: allocatedFundsSum,
       minBudget: minBudget,
       maxBudget: maxBudget,
       managerSignature: managerSignature,

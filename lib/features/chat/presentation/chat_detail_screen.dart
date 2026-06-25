@@ -115,11 +115,13 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   Timer? _callTicker;
   Timer? _incomingTypewriterTimer;
   bool _isIncomingAiTyping = false;
+  late final WebSocketService _webSocketService;
 
   @override
   void initState() {
     super.initState();
     _instance = this;
+    _webSocketService = ref.read(webSocketServiceProvider);
     CallController.instance.addListener(_onCallStateChanged);
     _startCallTicker();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -134,7 +136,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   Timer? _pollTimer;
 
   void _initWebSocket() {
-    final ws = ref.read(webSocketServiceProvider);
+    final ws = _webSocketService;
     final auth = ref.read(authProvider);
     
     if (auth.userId != null) {
@@ -647,7 +649,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _typewriterTimer?.cancel();
-    ref.read(webSocketServiceProvider).removeListener(_handleWsEvent);
+    _webSocketService.removeListener(_handleWsEvent);
     super.dispose();
   }
 

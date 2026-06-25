@@ -34,6 +34,11 @@ import '../models/company_stock.dart';
 import '../providers/company_stock_provider.dart';
 import 'widgets/stock_manage_dialog.dart';
 import 'stock_edit_screen.dart';
+import '../models/company_fund.dart';
+import '../providers/company_fund_provider.dart';
+import 'widgets/fund_manage_dialog.dart';
+import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
+import '../../chat/data/websocket_service.dart';
 
 class WordLimitFormatter extends TextInputFormatter {
   final int maxWords;
@@ -104,6 +109,15 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
   String _stockSearchQuery = '';
   bool _showTrashedStocks = false;
 
+  // Funds Tab – Search & filter
+  final TextEditingController _fundSearchController = TextEditingController();
+  String _fundSearchQuery = '';
+  String _fundTagFilter = '';
+  bool _showTrashedFunds = false;
+
+  Timer? _overviewPollTimer;
+  late final WebSocketService _webSocketService;
+
   @override
   void initState() {
     super.initState();
@@ -115,6 +129,50 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
     final savedSettingsTab = AppConfig.prefs?.getInt('company_settings_tab_${widget.companyId}');
     if (savedSettingsTab != null) {
       _settingsTabIndex = savedSettingsTab;
+    }
+
+    // Realtime WebSocket metrics updates
+    _webSocketService = ref.read(webSocketServiceProvider);
+    _webSocketService.addListener(_onWsEvent);
+
+    // Background polling every 12 seconds when Overview Tab is active
+    _overviewPollTimer = Timer.periodic(const Duration(seconds: 12), (timer) {
+      if (mounted && _selectedTabIndex == 0) {
+        ref.read(companyStockProvider(widget.companyId).notifier).fetchStocks();
+        ref.read(companyExternalQuotaProvider(widget.companyId).notifier).fetchQuotas();
+        ref.read(companyFundProvider(widget.companyId).notifier).fetchFunds();
+        ref.read(projectProvider.notifier).fetchProjects();
+      }
+    });
+  }
+
+  void _onWsEvent(PusherEvent event) {
+    final name = event.eventName;
+    final shouldRefresh = name.contains('data.updated') ||
+        name.contains('company.updated') ||
+        name.contains('category.updated') ||
+        name.contains('project_updated') ||
+        name.contains('task_updated') ||
+        name.contains('plan_updated') ||
+        name.contains('_approved') ||
+        name.contains('fund');
+    if (shouldRefresh && mounted) {
+      try {
+        if (_selectedTabIndex == 0 || _selectedTabIndex == 5) {
+          ref.invalidate(companyFundProvider(widget.companyId));
+        }
+        if (_selectedTabIndex == 0 || _selectedTabIndex == 4) {
+          ref.invalidate(companyStockProvider(widget.companyId));
+        }
+        if (_selectedTabIndex == 0 || _selectedTabIndex == 3) {
+          ref.invalidate(companyExternalQuotaProvider(widget.companyId));
+        }
+        if (_selectedTabIndex == 0 || _selectedTabIndex == 1) {
+          ref.invalidate(projectProvider);
+        }
+      } catch (_) {
+        // Handle element disposal safely
+      }
     }
   }
 
@@ -147,10 +205,13 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
 
   @override
   void dispose() {
+    _webSocketService.removeListener(_onWsEvent);
+    _overviewPollTimer?.cancel();
     _pidController.dispose();
     _attachedSearchController.dispose();
     _quotaSearchController.dispose();
     _stockSearchController.dispose();
+    _fundSearchController.dispose();
     super.dispose();
   }
 
@@ -444,7 +505,12 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(companyStockProvider(widget.companyId).notifier).fetchStocks(showTrashed: _showTrashedStocks);
       });
-    } else if (_selectedTabIndex != 1 && _selectedTabIndex != 3 && _selectedTabIndex != 4) {
+    } else if (_selectedTabIndex == 5 && _lastTabIndex != 5) {
+      _lastTabIndex = 5;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(companyFundProvider(widget.companyId).notifier).fetchFunds(showTrashed: _showTrashedFunds);
+      });
+    } else if (_selectedTabIndex != 1 && _selectedTabIndex != 3 && _selectedTabIndex != 4 && _selectedTabIndex != 5) {
       _lastTabIndex = _selectedTabIndex; // Reset tracker when leaving the tab
     }
 
@@ -476,6 +542,13 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
                             padding: const EdgeInsets.only(top: kHeaderHeight),
                             child: AnimatedSwitcher(
                               duration: const Duration(milliseconds: 400),
+                              layoutBuilder: (currentChild, previousChildren) => Stack(
+                                alignment: Alignment.topLeft,
+                                children: <Widget>[
+                                  ...previousChildren,
+                                  if (currentChild != null) currentChild,
+                                ],
+                              ),
                               child: _buildContent(company, isDark),
                             ),
                           ),
@@ -696,7 +769,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       case 2: return 'Strategic Radar';
       case 3: return 'External';
       case 4: return 'Stock';
-      case 5: return 'Company Settings';
+      case 5: return 'Funds';
+      case 6: return 'Company Settings';
       default: return '';
     }
   }
@@ -774,7 +848,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
                     _sidebarItem(2, IconsaxPlusLinear.radar, 'Radar', isDark),
                     _sidebarItem(3, IconsaxPlusLinear.wallet_money, 'External', isDark),
                     _sidebarItem(4, IconsaxPlusLinear.box, 'Stock', isDark),
-                    _sidebarItem(5, Icons.settings_outlined, 'Settings', isDark),
+                    _sidebarItem(5, IconsaxPlusLinear.empty_wallet, 'Funds', isDark),
+                    _sidebarItem(6, Icons.settings_outlined, 'Settings', isDark),
                   ],
                 ),
               ),
@@ -902,7 +977,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       case 2: return _buildMapTab(company, isDark);
       case 3: return _buildExternalTab(company, isDark);
       case 4: return _buildStockTab(company, isDark);
-      case 5: return _buildSettingsContainer(company, isDark);
+      case 5: return _buildFundsTab(company, isDark);
+      case 6: return _buildSettingsContainer(company, isDark);
       default: return const SizedBox.shrink();
     }
   }
@@ -3062,6 +3138,1382 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
     );
   }
 
+  Map<String, List<CompanyFund>> _groupFundsByDate(List<CompanyFund> funds) {
+    final Map<String, List<CompanyFund>> groups = {};
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    for (final fund in funds) {
+      final fundDate = DateTime(fund.date.year, fund.date.month, fund.date.day);
+
+      String header;
+      if (fundDate == today) {
+        header = 'Today';
+      } else if (fundDate == yesterday) {
+        header = 'Yesterday';
+      } else {
+        header = DateFormat('MMMM dd, yyyy').format(fundDate);
+      }
+
+      if (!groups.containsKey(header)) {
+        groups[header] = [];
+      }
+      groups[header]!.add(fund);
+    }
+    return groups;
+  }
+
+  Widget _buildFundStatCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+    required bool isDark,
+    required double width,
+  }) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B).withOpacity(0.4) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.05 : 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                ),
+              ),
+              Icon(icon, color: iconColor, size: 20),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: GoogleFonts.outfit(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : AppColors.lightText,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: GoogleFonts.outfit(
+              fontSize: 10,
+              color: isDark ? Colors.white38 : Colors.black38,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactMetricItem({
+    required String title,
+    required String value,
+    String? subtitle,
+    required IconData icon,
+    required Color iconColor,
+    required bool isDark,
+    double? width,
+  }) {
+    final itemContent = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: iconColor, size: 16),
+        ),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : AppColors.lightText,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 1),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF10B981),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (width != null) {
+      return SizedBox(
+        width: width,
+        child: itemContent,
+      );
+    }
+    return itemContent;
+  }
+
+  Widget _buildVerticalSeparator(bool isDark) {
+    return Container(
+      height: 24,
+      width: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+    );
+  }
+
+  void _exportFundsToCsv(List<CompanyFund> list) {
+    try {
+      final csv = StringBuffer();
+      csv.writeln('FID,Date,Title,Description,Amount,Tags');
+      for (final f in list) {
+        csv.writeln('"${f.fid}","${f.date.toIso8601String()}","${f.title.replaceAll('"', '""')}","${f.description.replaceAll('"', '""')}",${f.amount},"${f.tags.replaceAll('"', '""')}"');
+      }
+      Clipboard.setData(ClipboardData(text: csv.toString()));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(children: [
+            Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+            SizedBox(width: 8),
+            Text('Funds list copied to clipboard as CSV!'),
+          ]),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        )
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        )
+      );
+    }
+  }
+
+  void _showFundDeleteDialog(
+    BuildContext context,
+    CompanyFund fund,
+    CompanyFundNotifier notifier,
+    bool isDark,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final textColor = isDark ? Colors.white : Colors.black87;
+        final dialogBg = isDark ? const Color(0xFF09090D) : Colors.white;
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: AlertDialog(
+            backgroundColor: dialogBg,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(
+                color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05),
+              ),
+            ),
+            title: Text('Delete Fund?',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+            content: Text(
+              'Move "${fund.title}" to the Recycle Bin? You can restore it later.',
+              style: GoogleFonts.outfit(fontSize: 13, color: isDark ? Colors.white70 : Colors.black54),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Cancel',
+                    style: GoogleFonts.outfit(color: Colors.grey, fontWeight: FontWeight.w600, fontSize: 13)),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    await notifier.deleteFund(fund.id, isShowingTrashed: _showTrashedFunds);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Row(children: [
+                            Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                            SizedBox(width: 8),
+                            Text('Fund moved to Recycle Bin'),
+                          ]),
+                          backgroundColor: AppColors.success,
+                          behavior: SnackBarBehavior.floating,
+                          margin: const EdgeInsets.all(16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(children: [
+                            const Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text('Failed to delete fund: $e')),
+                          ]),
+                          backgroundColor: AppColors.error,
+                          behavior: SnackBarBehavior.floating,
+                          margin: const EdgeInsets.all(16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.error,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text('Delete',
+                    style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+
+
+
+  void _showFundForceDeleteDialog(
+    BuildContext context,
+    CompanyFund fund,
+    CompanyFundNotifier notifier,
+    bool isDark,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final textColor = isDark ? Colors.white : Colors.black87;
+        final dialogBg = isDark ? const Color(0xFF09090D) : Colors.white;
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: AlertDialog(
+            backgroundColor: dialogBg,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(
+                color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05),
+              ),
+            ),
+            title: Text('Permanently Delete Fund?',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+            content: Text(
+              'Permanently delete "${fund.title}"? This cannot be undone.',
+              style: GoogleFonts.outfit(fontSize: 13, color: isDark ? Colors.white70 : Colors.black54),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Cancel',
+                    style: GoogleFonts.outfit(color: Colors.grey, fontWeight: FontWeight.w600, fontSize: 13)),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    await notifier.forceDeleteFund(fund.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Row(children: [
+                            Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                            SizedBox(width: 8),
+                            Text('Fund permanently deleted'),
+                          ]),
+                          backgroundColor: AppColors.success,
+                          behavior: SnackBarBehavior.floating,
+                          margin: const EdgeInsets.all(16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(children: [
+                            const Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text('Failed to delete permanently: $e')),
+                          ]),
+                          backgroundColor: AppColors.error,
+                          behavior: SnackBarBehavior.floating,
+                          margin: const EdgeInsets.all(16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.error,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text('Permanently Delete',
+                    style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFundsTab(Company company, bool isDark) {
+    final funds = ref.watch(companyFundProvider(company.id));
+    final notifier = ref.read(companyFundProvider(company.id).notifier);
+    final trashedFunds = ref.watch(companyFundTrashedProvider(company.id));
+    final trashedCount = trashedFunds.length;
+    final textColor = isDark ? Colors.white : AppColors.lightText;
+    final hintColor = isDark ? Colors.white38 : Colors.black38;
+
+    final filteredFunds = funds.where((fund) {
+      final matchesSearch = fund.title.toLowerCase().contains(_fundSearchQuery.toLowerCase()) ||
+          fund.fid.toLowerCase().contains(_fundSearchQuery.toLowerCase()) ||
+          fund.description.toLowerCase().contains(_fundSearchQuery.toLowerCase()) ||
+          fund.tags.toLowerCase().contains(_fundSearchQuery.toLowerCase());
+      final matchesTag = _fundTagFilter.isEmpty || fund.tags.toLowerCase().contains(_fundTagFilter.toLowerCase());
+      return matchesSearch && matchesTag;
+    }).toList();
+
+    final groupedFunds = _groupFundsByDate(filteredFunds);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final isCompact = screenWidth < 720;
+
+    final double totalActiveAmount = funds.fold(0.0, (sum, f) => sum + f.amount);
+    final int activeCount = funds.length;
+
+    // Calculate balance share percentage dynamically
+    final stocks = ref.watch(companyStockProvider(company.id));
+    double stockMiddlePrice = 0.0;
+    for (final stock in stocks) {
+      for (final asset in stock.assets) {
+        stockMiddlePrice += (asset.minPrice + asset.maxPrice) / 2;
+      }
+    }
+    
+    final quotas = ref.watch(companyExternalQuotaProvider(company.id));
+    double totalEarn = 0.0;
+    for (final quota in quotas) {
+      totalEarn += quota.earn;
+    }
+    
+    final double totalBalance = stockMiddlePrice + totalEarn + totalActiveAmount;
+    final double fundsPercentage = totalBalance > 0 ? (totalActiveAmount / totalBalance) * 100 : 0.0;
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: _showTrashedFunds
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => FundManageDialog(
+                    onSave: ({required title, required description, required amount, required tags, required date, fid}) async {
+                      try {
+                        await notifier.addFund(
+                          title: title,
+                          description: description,
+                          amount: amount,
+                          tags: tags,
+                          date: date,
+                          fid: fid,
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Row(children: [
+                                Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                                SizedBox(width: 8),
+                                Text('Fund entry added successfully'),
+                              ]),
+                              backgroundColor: AppColors.success,
+                              behavior: SnackBarBehavior.floating,
+                              margin: const EdgeInsets.all(16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(children: [
+                                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text('Failed to add fund: $e')),
+                              ]),
+                              backgroundColor: AppColors.error,
+                              behavior: SnackBarBehavior.floating,
+                              margin: const EdgeInsets.all(16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                );
+              },
+              backgroundColor: AppColors.primary,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text('Add Fund', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 32,
+          vertical: isMobile ? 16 : 24,
+        ),
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B).withOpacity(0.4) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isDark ? 0.05 : 0.02),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  )
+                ],
+              ),
+              child: isCompact
+                  ? SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: [
+                          _buildCompactMetricItem(
+                            title: 'Total Funds',
+                            value: '\$${NumberFormat('#,##0.00').format(totalActiveAmount)}',
+                            icon: IconsaxPlusLinear.wallet_3,
+                            iconColor: const Color(0xFF6366F1),
+                            isDark: isDark,
+                            width: 155,
+                          ),
+                          _buildVerticalSeparator(isDark),
+                          _buildCompactMetricItem(
+                            title: 'Active Funds',
+                            value: '$activeCount',
+                            icon: IconsaxPlusLinear.empty_wallet_change,
+                            iconColor: const Color(0xFF10B981),
+                            isDark: isDark,
+                            width: 130,
+                          ),
+                          _buildVerticalSeparator(isDark),
+                          _buildCompactMetricItem(
+                            title: 'Recycle Bin',
+                            value: '$trashedCount',
+                            icon: IconsaxPlusLinear.trash,
+                            iconColor: const Color(0xFF8B5CF6),
+                            isDark: isDark,
+                            width: 130,
+                          ),
+                          _buildVerticalSeparator(isDark),
+                          _buildCompactMetricItem(
+                            title: 'Balance Share',
+                            value: '${fundsPercentage.toStringAsFixed(1)}%',
+                            icon: IconsaxPlusLinear.graph,
+                            iconColor: const Color(0xFFF59E0B),
+                            isDark: isDark,
+                            width: 140,
+                          ),
+                        ],
+                      ),
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: _buildCompactMetricItem(
+                            title: 'Total Funds',
+                            value: '\$${NumberFormat('#,##0.00').format(totalActiveAmount)}',
+                            icon: IconsaxPlusLinear.wallet_3,
+                            iconColor: const Color(0xFF6366F1),
+                            isDark: isDark,
+                          ),
+                        ),
+                        _buildVerticalSeparator(isDark),
+                        Expanded(
+                          child: _buildCompactMetricItem(
+                            title: 'Active Funds',
+                            value: '$activeCount',
+                            icon: IconsaxPlusLinear.empty_wallet_change,
+                            iconColor: const Color(0xFF10B981),
+                            isDark: isDark,
+                          ),
+                        ),
+                        _buildVerticalSeparator(isDark),
+                        Expanded(
+                          child: _buildCompactMetricItem(
+                            title: 'Recycle Bin',
+                            value: '$trashedCount',
+                            icon: IconsaxPlusLinear.trash,
+                            iconColor: const Color(0xFF8B5CF6),
+                            isDark: isDark,
+                          ),
+                        ),
+                        _buildVerticalSeparator(isDark),
+                        Expanded(
+                          child: _buildCompactMetricItem(
+                            title: 'Balance Share',
+                            value: '${fundsPercentage.toStringAsFixed(1)}%',
+                            icon: IconsaxPlusLinear.graph,
+                            iconColor: const Color(0xFFF59E0B),
+                            isDark: isDark,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+            const SizedBox(height: 24),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                    ),
+                    child: TextField(
+                      controller: _fundSearchController,
+                      style: TextStyle(color: textColor, fontSize: 14),
+                      textAlignVertical: TextAlignVertical.center,
+                      onChanged: (val) {
+                        setState(() {
+                          _fundSearchQuery = val;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Search funds (Title, Description, FID, Tag)...',
+                        hintStyle: TextStyle(color: hintColor, fontSize: 13),
+                        prefixIcon: Icon(IconsaxPlusLinear.search_normal, size: 18, color: hintColor),
+                        suffixIcon: _fundSearchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16),
+                                color: hintColor,
+                                onPressed: () {
+                                  _fundSearchController.clear();
+                                  setState(() {
+                                    _fundSearchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                PopupMenuButton<String>(
+                  tooltip: 'Filter by Tag',
+                  onSelected: (tag) {
+                    setState(() {
+                      if (_fundTagFilter == tag) {
+                        _fundTagFilter = '';
+                      } else {
+                        _fundTagFilter = tag;
+                      }
+                    });
+                  },
+                  child: Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: _fundTagFilter.isNotEmpty
+                          ? AppColors.primary.withOpacity(0.1)
+                          : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02)),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _fundTagFilter.isNotEmpty
+                            ? AppColors.primary
+                            : (isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.filter_list_rounded,
+                      color: _fundTagFilter.isNotEmpty ? AppColors.primary : textColor,
+                      size: 20,
+                    ),
+                  ),
+                  itemBuilder: (context) {
+                    final uniqueTags = <String>{};
+                    for (final f in funds) {
+                      if (f.tags.isNotEmpty) {
+                        for (final tag in f.tags.split(',')) {
+                          final t = tag.trim();
+                          if (t.isNotEmpty) uniqueTags.add(t);
+                        }
+                      }
+                    }
+                    return [
+                      PopupMenuItem<String>(
+                        value: '',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.filter_alt_off_outlined,
+                              size: 16,
+                              color: isDark ? Colors.white70 : Colors.black54,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('All Tags', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      ...uniqueTags.map((tag) {
+                        final isSelected = _fundTagFilter.toLowerCase() == tag.toLowerCase();
+                        return CheckedPopupMenuItem<String>(
+                          value: tag,
+                          checked: isSelected,
+                          child: Text(
+                            tag,
+                            style: TextStyle(
+                              color: isDark ? Colors.white.withOpacity(0.9) : Colors.black.withOpacity(0.9),
+                              fontSize: 13,
+                            ),
+                          ),
+                        );
+                      }),
+                    ];
+                  },
+                ),
+                const SizedBox(width: 12),
+
+                IconButton(
+                  tooltip: 'Export Funds to CSV',
+                  icon: Icon(IconsaxPlusLinear.document_download, size: 18, color: textColor),
+                  style: IconButton.styleFrom(
+                    backgroundColor: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+                      ),
+                    ),
+                    minimumSize: const Size(48, 48),
+                  ),
+                  onPressed: () => _exportFundsToCsv(filteredFunds),
+                ),
+                const SizedBox(width: 12),
+
+                Badge(
+                  label: Text('$trashedCount',
+                      style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
+                  isLabelVisible: trashedCount > 0,
+                  backgroundColor: AppColors.error,
+                  child: IconButton(
+                    tooltip: _showTrashedFunds ? 'Show Active Funds' : 'Show Recycle Bin',
+                    icon: Icon(
+                      _showTrashedFunds ? Icons.delete_forever : Icons.delete_outline,
+                      size: 18,
+                      color: _showTrashedFunds ? AppColors.error : textColor,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: _showTrashedFunds
+                          ? AppColors.error.withOpacity(0.1)
+                          : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: _showTrashedFunds
+                              ? AppColors.error
+                              : (isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                        ),
+                      ),
+                      minimumSize: const Size(48, 48),
+                    ),
+                    onPressed: () {
+                      setState(() => _showTrashedFunds = !_showTrashedFunds);
+                      ref.read(companyFundProvider(company.id).notifier)
+                          .fetchFunds(showTrashed: _showTrashedFunds);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            if (funds.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 80),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(_showTrashedFunds ? Icons.delete_sweep_outlined : IconsaxPlusLinear.box,
+                          size: 64, color: hintColor),
+                      const SizedBox(height: 16),
+                      Text(
+                        _showTrashedFunds ? 'Recycle Bin is empty' : 'No funds added yet',
+                        style: TextStyle(color: hintColor, fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _showTrashedFunds
+                            ? 'Deleted funds will appear here'
+                            : 'Click "Add Fund" to create your first entry',
+                        style: TextStyle(color: hintColor.withOpacity(0.8), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (filteredFunds.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 80),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(IconsaxPlusLinear.search_status, size: 64, color: hintColor),
+                      const SizedBox(height: 16),
+                      Text('No matching funds found',
+                          style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Text('Try adjusting your search query or tag filter',
+                          style: TextStyle(color: hintColor, fontSize: 13)),
+                      const SizedBox(height: 16),
+                      TextButton.icon(
+                        onPressed: () {
+                          _fundSearchController.clear();
+                          setState(() {
+                            _fundSearchQuery = '';
+                            _fundTagFilter = '';
+                          });
+                        },
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Reset Filters'),
+                        style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: groupedFunds.keys.length,
+                itemBuilder: (context, index) {
+                  final dateHeader = groupedFunds.keys.elementAt(index);
+                  final fundsInDate = groupedFunds[dateHeader]!;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16, bottom: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.05)
+                                    : Colors.black.withOpacity(0.04),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                dateHeader,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white54 : Colors.black54,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Divider(
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.05)
+                                    : Colors.black.withOpacity(0.03),
+                                height: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: fundsInDate.length,
+                        itemBuilder: (context, idx) {
+                          final fund = fundsInDate[idx];
+                          final formattedTime = DateFormat('hh:mm a').format(fund.date);
+                          final formattedDate = DateFormat('dd MMM yyyy').format(fund.date);
+
+                          final actions = _showTrashedFunds
+                              ? <Widget>[
+                                  IconButton(
+                                    tooltip: 'Restore Fund',
+                                    icon: const Icon(Icons.restore_rounded,
+                                        size: 16, color: AppColors.success),
+                                    style: IconButton.styleFrom(
+                                      hoverColor: AppColors.success.withOpacity(0.1),
+                                      padding: EdgeInsets.all(isCompact ? 6 : 8),
+                                      minimumSize: Size(isCompact ? 28 : 32, isCompact ? 28 : 32),
+                                    ),
+                                    onPressed: () async {
+                                      try {
+                                        await notifier.restoreFund(fund.id);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: const Row(children: [
+                                                Icon(Icons.check_circle_outline_rounded,
+                                                    color: Colors.white, size: 18),
+                                                SizedBox(width: 8),
+                                                Text('Fund restored successfully'),
+                                              ]),
+                                              backgroundColor: AppColors.success,
+                                              behavior: SnackBarBehavior.floating,
+                                              margin: const EdgeInsets.all(16),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(12)),
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Row(children: [
+                                                const Icon(Icons.error_outline_rounded,
+                                                    color: Colors.white, size: 18),
+                                                const SizedBox(width: 8),
+                                                Expanded(child: Text('Failed to restore: $e')),
+                                              ]),
+                                              backgroundColor: AppColors.error,
+                                              behavior: SnackBarBehavior.floating,
+                                              margin: const EdgeInsets.all(16),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(12)),
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
+                                  if (!isCompact) const SizedBox(width: 4),
+                                  IconButton(
+                                    tooltip: 'Permanently Delete',
+                                    icon: Icon(Icons.delete_forever_rounded,
+                                        size: 16, color: AppColors.error.withOpacity(0.8)),
+                                    style: IconButton.styleFrom(
+                                      hoverColor: AppColors.error.withOpacity(0.1),
+                                      padding: EdgeInsets.all(isCompact ? 6 : 8),
+                                      minimumSize: Size(isCompact ? 28 : 32, isCompact ? 28 : 32),
+                                    ),
+                                    onPressed: () =>
+                                        _showFundForceDeleteDialog(context, fund, notifier, isDark),
+                                  ),
+                                ]
+                              : <Widget>[
+                                  IconButton(
+                                    tooltip: 'Edit Fund',
+                                    icon: Icon(Icons.edit_outlined, size: 16, color: hintColor),
+                                    style: IconButton.styleFrom(
+                                      hoverColor: AppColors.primary.withOpacity(0.1),
+                                      padding: EdgeInsets.all(isCompact ? 6 : 8),
+                                      minimumSize: Size(isCompact ? 28 : 32, isCompact ? 28 : 32),
+                                    ),
+                                    onPressed: () => showDialog(
+                                      context: context,
+                                      builder: (context) => FundManageDialog(
+                                        fund: fund,
+                                        onSave: ({required title, required description, required amount, required tags, required date, fid}) async {
+                                          try {
+                                            final updated = fund.copyWith(
+                                              title: title,
+                                              description: description,
+                                              amount: amount,
+                                              tags: tags,
+                                              date: date,
+                                            );
+                                            await notifier.updateFund(updated);
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: const Row(children: [
+                                                    Icon(Icons.check_circle_outline_rounded,
+                                                        color: Colors.white, size: 18),
+                                                    SizedBox(width: 8),
+                                                    Text('Fund updated successfully'),
+                                                  ]),
+                                                  backgroundColor: AppColors.success,
+                                                  behavior: SnackBarBehavior.floating,
+                                                  margin: const EdgeInsets.all(16),
+                                                  shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(12)),
+                                                ),
+                                              );
+                                            }
+                                          } catch (e) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Row(children: [
+                                                    const Icon(Icons.error_outline_rounded,
+                                                        color: Colors.white, size: 18),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(child: Text('Failed to update: $e')),
+                                                  ]),
+                                                  backgroundColor: AppColors.error,
+                                                  behavior: SnackBarBehavior.floating,
+                                                  margin: const EdgeInsets.all(16),
+                                                  shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(12)),
+                                                ),
+                                              );
+                                            }
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  if (!isCompact) const SizedBox(width: 4),
+                                  IconButton(
+                                    tooltip: 'Delete Fund',
+                                    icon: Icon(Icons.delete_outline_rounded,
+                                        size: 16, color: AppColors.error.withOpacity(0.8)),
+                                    style: IconButton.styleFrom(
+                                      hoverColor: AppColors.error.withOpacity(0.1),
+                                      padding: EdgeInsets.all(isCompact ? 6 : 8),
+                                      minimumSize: Size(isCompact ? 28 : 32, isCompact ? 28 : 32),
+                                    ),
+                                    onPressed: () =>
+                                        _showFundDeleteDialog(context, fund, notifier, isDark),
+                                  ),
+                                ];
+
+                          Widget cardContent;
+                          if (isCompact) {
+                            cardContent = Row(
+                              children: [
+                                Container(
+                                  width: 3.5,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                      color: const Color(0xFF6366F1),
+                                      borderRadius: BorderRadius.circular(2)),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        fund.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: textColor),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 4,
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        children: [
+                                          InkWell(
+                                            onTap: () {
+                                              Clipboard.setData(ClipboardData(text: fund.fid));
+                                              ScaffoldMessenger.of(context).clearSnackBars();
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      const Icon(Icons.copy_all_rounded, color: Colors.white, size: 14),
+                                                      const SizedBox(width: 8),
+                                                      Text(
+                                                        'Copied tracking ID: ${fund.fid}',
+                                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  duration: const Duration(seconds: 1),
+                                                  behavior: SnackBarBehavior.floating,
+                                                  margin: const EdgeInsets.all(16),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                  backgroundColor: const Color(0xFF6366F1),
+                                                ),
+                                              );
+                                            },
+                                            borderRadius: BorderRadius.circular(5),
+                                            child: Tooltip(
+                                              message: 'Click to copy tracking ID',
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(5),
+                                                  border: Border.all(
+                                                      color: const Color(0xFF6366F1).withOpacity(0.25),
+                                                      width: 0.5),
+                                                ),
+                                                child: Text(
+                                                  fund.fid,
+                                                  style: const TextStyle(
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.w900,
+                                                      color: Color(0xFF6366F1),
+                                                      letterSpacing: 1),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            '\$${NumberFormat('#,##0.00').format(fund.amount)}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w800,
+                                              color: fund.amount >= 0 ? const Color(0xFF10B981) : AppColors.error,
+                                            ),
+                                          ),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.access_time_rounded,
+                                                  size: 9, color: hintColor),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                formattedDate,
+                                                style: TextStyle(
+                                                    fontSize: 9,
+                                                    color: hintColor,
+                                                    fontWeight: FontWeight.w500),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Row(mainAxisSize: MainAxisSize.min, children: actions),
+                              ],
+                            );
+                          } else {
+                            cardContent = Row(
+                              children: [
+                                Container(
+                                  width: 3.5,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                      color: const Color(0xFF6366F1),
+                                      borderRadius: BorderRadius.circular(2)),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 3,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        fund.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: textColor),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          InkWell(
+                                            onTap: () {
+                                              Clipboard.setData(ClipboardData(text: fund.fid));
+                                              ScaffoldMessenger.of(context).clearSnackBars();
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      const Icon(Icons.copy_all_rounded, color: Colors.white, size: 14),
+                                                      const SizedBox(width: 8),
+                                                      Text(
+                                                        'Copied tracking ID: ${fund.fid}',
+                                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  duration: const Duration(seconds: 1),
+                                                  behavior: SnackBarBehavior.floating,
+                                                  margin: const EdgeInsets.all(16),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                  backgroundColor: const Color(0xFF6366F1),
+                                                ),
+                                              );
+                                            },
+                                            borderRadius: BorderRadius.circular(5),
+                                            child: Tooltip(
+                                              message: 'Click to copy tracking ID',
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 7, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(5),
+                                                  border: Border.all(
+                                                      color: const Color(0xFF6366F1).withOpacity(0.25),
+                                                      width: 0.5),
+                                                ),
+                                                child: Text(
+                                                  fund.fid,
+                                                  style: const TextStyle(
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.w900,
+                                                      color: Color(0xFF6366F1),
+                                                      letterSpacing: 1.2),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          if (fund.tags.isNotEmpty) ...[
+                                            const SizedBox(width: 8),
+                                            ...fund.tags.split(',').map((t) => Container(
+                                              margin: const EdgeInsets.only(right: 4),
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                t.trim(),
+                                                style: TextStyle(fontSize: 8, color: hintColor),
+                                              ),
+                                            )),
+                                          ],
+                                          ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  flex: 2,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      '\$${NumberFormat('#,##0.00').format(fund.amount)}',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800,
+                                        color: fund.amount >= 0 ? const Color(0xFF10B981) : AppColors.error,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  flex: 2,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.access_time_rounded,
+                                          size: 11, color: hintColor),
+                                      const SizedBox(width: 5),
+                                      Flexible(
+                                        child: Text(
+                                          '$formattedDate  •  $formattedTime',
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: hintColor,
+                                              fontWeight: FontWeight.w500),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Row(mainAxisSize: MainAxisSize.min, children: actions),
+                              ],
+                            );
+                          }
+
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF1E293B).withOpacity(0.4)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                  color: isDark
+                                      ? Colors.white.withOpacity(0.08)
+                                      : Colors.black.withOpacity(0.04)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(isDark ? 0.05 : 0.02),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                )
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: InkWell(
+                                onTap: _showTrashedFunds
+                                    ? null
+                                    : () => showDialog(
+                                          context: context,
+                                          builder: (context) => FundManageDialog(
+                                            fund: fund,
+                                            onSave: ({required title, required description, required amount, required tags, required date, fid}) async {
+                                              try {
+                                                final updated = fund.copyWith(
+                                                  title: title,
+                                                  description: description,
+                                                  amount: amount,
+                                                  tags: tags,
+                                                  date: date,
+                                                );
+                                                await notifier.updateFund(updated);
+                                                if (context.mounted) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(
+                                                      content: const Row(children: [
+                                                        Icon(Icons.check_circle_outline_rounded,
+                                                            color: Colors.white, size: 18),
+                                                        SizedBox(width: 8),
+                                                        Text('Fund updated successfully'),
+                                                      ]),
+                                                      backgroundColor: AppColors.success,
+                                                      behavior: SnackBarBehavior.floating,
+                                                      margin: const EdgeInsets.all(16),
+                                                      shape: RoundedRectangleBorder(
+                                                          borderRadius: BorderRadius.circular(12)),
+                                                    ),
+                                                  );
+                                                }
+                                              } catch (e) {
+                                                if (context.mounted) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(
+                                                      content: Row(children: [
+                                                        const Icon(Icons.error_outline_rounded,
+                                                            color: Colors.white, size: 18),
+                                                        const SizedBox(width: 8),
+                                                        Expanded(child: Text('Failed to update: $e')),
+                                                      ]),
+                                                      backgroundColor: AppColors.error,
+                                                      behavior: SnackBarBehavior.floating,
+                                                      margin: const EdgeInsets.all(16),
+                                                      shape: RoundedRectangleBorder(
+                                                          borderRadius: BorderRadius.circular(12)),
+                                                    ),
+                                                  );
+                                                }
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
+                                  child: cardContent,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildConfigureTab(Company company, bool isDark) {
     final textColor = isDark ? Colors.white : AppColors.lightText;
     final subTextColor = isDark ? Colors.white70 : Colors.black54;
@@ -3498,17 +4950,19 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
   Widget _buildOverviewTab(Company company, bool isDark) {
     final w = MediaQuery.of(context).size.width;
     final isMobile = w < 600;
-    final isTablet = w >= 600 && w < 1000;
-    final paddingVal = isMobile ? 16.0 : 32.0;
+    final isTablet = w >= 600 && w < 1100;
+    final paddingVal = isMobile ? 16.0 : 24.0;
 
     // 1. Live Assets valuation calculations
     final stocks = ref.watch(companyStockProvider(company.id));
+    double stockMiddlePrice = 0.0;
     double totalMinAssetPrice = 0.0;
     double totalMaxAssetPrice = 0.0;
     for (final stock in stocks) {
       for (final asset in stock.assets) {
         totalMinAssetPrice += asset.minPrice;
         totalMaxAssetPrice += asset.maxPrice;
+        stockMiddlePrice += (asset.minPrice + asset.maxPrice) / 2;
       }
     }
     final hasAssets = stocks.any((s) => s.assets.isNotEmpty);
@@ -3532,6 +4986,157 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
     final completedProjects = projects.where((p) => p.status == pmod.ProjectStatus.completed).length;
     final otherProjects = totalProjects - activeProjects - planningProjects - completedProjects;
     final double completionRate = totalProjects > 0 ? (completedProjects / totalProjects) : 0.0;
+
+    // 4. Budgets and Funds calculations
+    // Projects Budget = sum of confirmedBudget (or totalBudget) for projects
+    // where BOTH admin (founder) AND sub-admin (manager) have signed.
+    final signedProjects = projects.where((p) =>
+        p.managerSignature.isNotEmpty && p.founderSignature.isNotEmpty).toList();
+    final double totalProjectsBudget = signedProjects.fold(0.0,
+        (sum, p) => sum + (p.confirmedBudget ?? p.totalBudget));
+    final int signedProjectsCount = signedProjects.length;
+
+    final companyFunds = ref.watch(companyFundProvider(company.id));
+    final double totalFundsAmount = companyFunds.fold(0.0, (sum, f) => sum + f.amount);
+    final double totalBalance = stockMiddlePrice + totalEarn + totalFundsAmount;
+    final double totalFund = totalBalance + totalProjectsBudget;
+
+    // 5. Plans calculations
+    final allPlans = projects.expand((p) => p.plans).toList();
+    final totalPlansCount = allPlans.length;
+    final activePlans = allPlans.where((p) =>
+        p.status.toLowerCase() == 'in_progress' ||
+        p.status.toLowerCase() == 'active').toList();
+    final completedPlans = allPlans.where((p) =>
+        p.status.toLowerCase() == 'completed').toList();
+
+    final activePlansCount = activePlans.length;
+
+    // Process Projects budget = sum of active/in_progress plan budgets across all projects
+    double processProjectsBudget = activePlans.fold(0.0, (sum, p) => sum + p.budget);
+    double completedPlanBudget = completedPlans.fold(0.0, (sum, p) => sum + p.budget);
+
+    // Live trend percentage metrics
+    final double balanceChangeRate = totalEarn > 0 ? (netBalance / totalEarn) * 100 : 0.0;
+    final double fundChangeRate = totalFund > 0 ? (totalProjectsBudget / totalFund) * 100 : 0.0;
+
+    final double projectBudgetProcessRate = totalProjectsBudget > 0
+        ? (processProjectsBudget / totalProjectsBudget) * 100
+        : 0.0;
+
+    final double activePlanRate = totalPlansCount > 0 ? (activePlansCount / totalPlansCount) * 100 : 0.0;
+    final double earnNetRate = totalEarn > 0 ? ((totalEarn - totalExpense) / totalEarn) * 100 : 0.0;
+
+    final double cardsToShow = w > 768 ? 3.8 : 2.8;
+    final double cardWidth = ((w - (paddingVal * 2) - 12 * (cardsToShow.ceil() - 1)) / cardsToShow).clamp(140.0, 260.0);
+    final cardsList = [
+      _buildOverviewStatCard(
+        title: 'Total Funds',
+        value: '\$${NumberFormat('#,##0').format(totalFund)}',
+        icon: IconsaxPlusLinear.empty_wallet_change,
+        color: Colors.purple,
+        isDark: isDark,
+        trendPercent: fundChangeRate,
+        bottomWidget: Center(
+          child: Text(
+            'Bal: \$${NumberFormat.compact().format(totalBalance)} | Proj: \$${NumberFormat.compact().format(totalProjectsBudget)}',
+            style: TextStyle(fontSize: 8, color: isDark ? Colors.white38 : Colors.black38, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+      _buildOverviewStatCard(
+        title: 'Total Balance',
+        value: '\$${NumberFormat('#,##0').format(totalBalance)}',
+        icon: IconsaxPlusLinear.wallet,
+        color: Colors.blue,
+        isDark: isDark,
+        trendPercent: balanceChangeRate,
+        bottomWidget: Center(
+          child: Text(
+            'Stock: \$${NumberFormat.compact().format(stockMiddlePrice)} | Ext: \$${NumberFormat.compact().format(totalEarn)} | Funds: \$${NumberFormat.compact().format(totalFundsAmount)}',
+            style: TextStyle(fontSize: 8, color: isDark ? Colors.white38 : Colors.black38, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+      _buildOverviewStatCard(
+        title: 'Projects Budget',
+        value: '\$${NumberFormat('#,##0').format(totalProjectsBudget)}',
+        icon: IconsaxPlusLinear.folder_open,
+        color: Colors.teal,
+        isDark: isDark,
+        trendPercent: projectBudgetProcessRate,
+        bottomWidget: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Signed: $signedProjectsCount/$totalProjects | \$${NumberFormat.compact().format(totalProjectsBudget)}',
+                style: TextStyle(fontSize: 8, color: isDark ? Colors.white38 : Colors.black38, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$activeProjects Active | $completedProjects Done',
+                style: TextStyle(fontSize: 8, color: isDark ? Colors.white38 : Colors.black38, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+      ),
+      _buildOverviewStatCard(
+        title: 'Process Projects',
+        value: '\$${NumberFormat('#,##0').format(processProjectsBudget)}',
+        icon: IconsaxPlusLinear.calendar,
+        color: Colors.amber,
+        isDark: isDark,
+        trendPercent: activePlanRate,
+        bottomWidget: Center(
+          child: Text(
+            'Active: \$${NumberFormat.compact().format(processProjectsBudget)} | Done: \$${NumberFormat.compact().format(completedPlanBudget)}',
+            style: TextStyle(fontSize: 8, color: isDark ? Colors.white38 : Colors.black38, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+      _buildOverviewStatCard(
+        title: 'Total Earn',
+        value: '\$${NumberFormat('#,##0').format(totalEarn)}',
+        icon: IconsaxPlusLinear.dollar_circle,
+        color: Colors.green,
+        isDark: isDark,
+        trendPercent: earnNetRate,
+        bottomWidget: Center(
+          child: Text(
+            'Expenses: \$${NumberFormat.compact().format(totalExpense)}',
+            style: TextStyle(fontSize: 8, color: isDark ? Colors.white38 : Colors.black38, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+    ];
+
+    Widget cardsRow;
+    if (w > 1200) {
+      // Desktop: 5 equal columns
+      cardsRow = Row(
+        children: cardsList.map((card) => Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: card,
+          ),
+        )).toList(),
+      );
+    } else {
+      // Mobile & Tablet: Horizontal scrollable
+      cardsRow = SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: cardsList.map((card) => Container(
+            width: cardWidth,
+            margin: const EdgeInsets.only(right: 12),
+            child: card,
+          )).toList(),
+        ),
+      );
+    }
 
     final mainDashboard = isMobile || isTablet
         ? Column(
@@ -3579,21 +5184,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Stat cards Grid
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: isMobile ? 1 : (isTablet ? 2 : 4),
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: isMobile ? 3.0 : 1.7,
-            children: [
-              _buildStatCard('Active Employees', company.activeEmployees.toString(), IconsaxPlusLinear.people, Colors.blue, isDark),
-              _buildStatCard('Annual Revenue', '\$${(company.annualRevenue / 1000000).toStringAsFixed(1)}M', IconsaxPlusLinear.money_send, Colors.green, isDark),
-              _buildStatCard('Health Score', '${(company.healthScore * 100).toInt()}%', IconsaxPlusLinear.heart, Colors.red, isDark),
-              _buildStatCard('Live Assets Valuation', hasAssets ? '\$${(totalMinAssetPrice / 1000).toStringAsFixed(1)}K - \$${(totalMaxAssetPrice / 1000).toStringAsFixed(1)}K' : '\$0', IconsaxPlusLinear.wallet_3, Colors.orange, isDark),
-            ],
-          ),
+          // Premium Live metrics cards row
+          cardsRow.animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
           const SizedBox(height: 24),
           mainDashboard,
         ],
@@ -3601,56 +5193,116 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color, bool isDark) {
+  Widget _buildOverviewStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    required bool isDark,
+    required double trendPercent,
+    bool showTrend = true,
+    Widget? bottomWidget,
+  }) {
+    final isPositive = trendPercent >= 0;
+    final trendColor = isPositive ? AppColors.success : AppColors.error;
+    
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      height: 135, // Keep height bounded and consistent
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B).withOpacity(0.4) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+        border: Border.all(color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.03)),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black.withOpacity(0.35) : Colors.black.withOpacity(0.03),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+          BoxShadow(
+            color: isDark ? Colors.black.withOpacity(0.15) : Colors.black.withOpacity(0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.2,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
-                    fontFamily: 'Manrope',
+                child: Icon(icon, color: color, size: 16),
+              ),
+              if (showTrend)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: trendColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isPositive ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                        color: trendColor,
+                        size: 10,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        '${isPositive ? '+' : ''}${trendPercent.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: trendColor,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
+            ],
           ),
+          const SizedBox(height: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.1,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 1),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontFamily: 'Manrope',
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+          if (bottomWidget != null) ...[
+            const SizedBox(height: 4),
+            bottomWidget,
+          ],
         ],
       ),
     );
@@ -4444,7 +6096,7 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
                 ),
               ),
 
-              const SizedBox(height: 32),
+
 
               // ── Strategy & Roadmaps ─────────────────────────────────────────
               _buildRecordCard('Strategy & Roadmaps', IconsaxPlusLinear.routing, isDark, [
@@ -4746,6 +6398,8 @@ class _SingleCompanyManageScreenState extends ConsumerState<SingleCompanyManageS
       ),
     );
   }
+
+
 
   Widget _buildRecordCard(String title, IconData icon, bool isDark, List<Widget> rows) {
     return Column(
@@ -5544,6 +7198,7 @@ Color _getSimulatedStatusColor(TaskStatus status) {
     case TaskStatus.completed: return Colors.green;
     case TaskStatus.review: return Colors.amberAccent;
     case TaskStatus.done: return Colors.tealAccent;
+    case TaskStatus.hold: return Colors.redAccent;
   }
 }
 
@@ -5821,7 +7476,7 @@ Widget _buildCompanyTaskDetailsModal({
                     }).toList(),
                     onChanged: (newStatus) {
                       if (newStatus != null && newStatus != task.status) {
-                        ref.read(taskProvider.notifier).updateTaskStatus(task.id, newStatus);
+                        ref.read(taskProvider).updateTaskStatus(task.id, newStatus);
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                           content: Text('Task status updated to ${newStatus.displayName}'),
@@ -6150,7 +7805,7 @@ class _StrategicCompanyMapCentralState extends ConsumerState<_StrategicCompanyMa
 
   void _syncData() {
     // Sync tasks for all projects belonging to this company
-    ref.read(taskProvider.notifier).syncWithDatabase(
+    ref.read(taskProvider).syncWithDatabase(
       companyId: widget.company.id,
     );
     // Also refresh project data to get latest plans

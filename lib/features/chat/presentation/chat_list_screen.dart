@@ -25,10 +25,12 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   List<Conversation> _conversations = [];
   bool _isLoading = true;
   bool _isProfileSetup = false;
+  late final WebSocketService _webSocketService;
 
   @override
   void initState() {
     super.initState();
+    _webSocketService = ref.read(webSocketServiceProvider);
     _checkProfileAndLoad();
   }
 
@@ -67,7 +69,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   Timer? _pollTimer;
 
   void _initWebSocket() {
-    final ws = ref.read(webSocketServiceProvider);
+    final ws = _webSocketService;
     final auth = ref.read(authProvider);
     
     if (auth.userId != null) {
@@ -125,7 +127,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
-    ref.read(webSocketServiceProvider).removeListener(_handleWsEvent);
+    _webSocketService.removeListener(_handleWsEvent);
     super.dispose();
   }
 

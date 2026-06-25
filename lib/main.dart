@@ -15,7 +15,7 @@ import 'dart:io' if (dart.library.html) 'package:frontend/core/utils/io_stub.dar
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  GoogleFonts.config.allowRuntimeFetching = false;
+  GoogleFonts.config.allowRuntimeFetching = true;
   
   // Enable immersive edge-to-edge system UI styling
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);

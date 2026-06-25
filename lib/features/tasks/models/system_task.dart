@@ -1,5 +1,5 @@
 enum TaskPriority { low, medium, high, critical }
-enum TaskStatus { todo, inProgress, review, done, completed }
+enum TaskStatus { todo, inProgress, review, done, completed, hold }
 
 extension TaskStatusExtension on TaskStatus {
   String get displayName {
@@ -9,6 +9,7 @@ extension TaskStatusExtension on TaskStatus {
       case TaskStatus.done: return 'DONE';
       case TaskStatus.completed: return 'COMPLETED';
       case TaskStatus.todo: return 'TO DO';
+      case TaskStatus.hold: return 'ON HOLD';
     }
   }
 }
@@ -31,6 +32,22 @@ class TaskDocument {
   TaskDocument copyWith({String? id, String? name, String? type, String? url, DateTime? uploadedAt}) {
     return TaskDocument(id: id ?? this.id, name: name ?? this.name, type: type ?? this.type, url: url ?? this.url, uploadedAt: uploadedAt ?? this.uploadedAt);
   }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'name': name,
+    'type': type,
+    'url': url,
+    'uploadedAt': uploadedAt.toIso8601String(),
+  };
+
+  factory TaskDocument.fromMap(Map<String, dynamic> map) => TaskDocument(
+    id: map['id']?.toString() ?? '',
+    name: map['name'] ?? '',
+    type: map['type'] ?? '',
+    url: map['url'],
+    uploadedAt: DateTime.parse(map['uploadedAt'] ?? map['uploaded_at'] ?? DateTime.now().toIso8601String()),
+  );
 }
 
 class SubTask {
@@ -44,18 +61,110 @@ class SubTask {
   SubTask copyWith({String? id, String? title, double? additionalCost, bool? isCompleted}) {
     return SubTask(id: id ?? this.id, title: title ?? this.title, additionalCost: additionalCost ?? this.additionalCost, isCompleted: isCompleted ?? this.isCompleted);
   }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'title': title,
+    'additionalCost': additionalCost,
+    'isCompleted': isCompleted,
+  };
+
+  factory SubTask.fromMap(Map<String, dynamic> map) => SubTask(
+    id: map['id']?.toString() ?? '',
+    title: map['title'] ?? '',
+    additionalCost: (map['additionalCost'] ?? map['additional_cost'] ?? 0.0).toDouble(),
+    isCompleted: map['isCompleted'] ?? map['is_completed'] ?? false,
+  );
 }
 
 class RoadmapStep {
   final String id;
   final String title;
   final String description;
-  final bool isCompleted;
+  /// 3-state status: 'Process' | 'Hold' | 'Complete'
+  final String status;
+  final String priority;
+  final DateTime? startTime;
+  final DateTime? endTime;
+  final bool isLocked;
 
-  RoadmapStep({required this.id, required this.title, this.description = '', this.isCompleted = false});
+  /// Backward-compatible getter — true when status is 'Complete'
+  bool get isCompleted => status == 'Complete';
 
-  RoadmapStep copyWith({String? id, String? title, String? description, bool? isCompleted}) {
-    return RoadmapStep(id: id ?? this.id, title: title ?? this.title, description: description ?? this.description, isCompleted: isCompleted ?? this.isCompleted);
+  const RoadmapStep({
+    required this.id,
+    required this.title,
+    this.description = '',
+    this.status = 'Process',
+    this.priority = 'Medium',
+    this.startTime,
+    this.endTime,
+    this.isLocked = false,
+  });
+
+  RoadmapStep copyWith({
+    String? id, 
+    String? title, 
+    String? description, 
+    String? status, 
+    bool? isCompleted, 
+    String? priority,
+    DateTime? startTime,
+    DateTime? endTime,
+    bool? isLocked,
+  }) {
+    String newStatus;
+    if (status != null) {
+      newStatus = status;
+    } else if (isCompleted != null) {
+      newStatus = isCompleted ? 'Complete' : 'Process';
+    } else {
+      newStatus = this.status;
+    }
+    return RoadmapStep(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      status: newStatus,
+      priority: priority ?? this.priority,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      isLocked: isLocked ?? this.isLocked,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'title': title,
+    'description': description,
+    'isCompleted': isCompleted,
+    'status': status,
+    'priority': priority,
+    'startTime': startTime?.toIso8601String(),
+    'endTime': endTime?.toIso8601String(),
+    'isLocked': isLocked,
+  };
+
+  factory RoadmapStep.fromMap(Map<String, dynamic> map) {
+    // New format has 'status' string; old format had 'isCompleted' bool
+    final rawStatus = map['status']?.toString();
+    final bool legacyCompleted = map['isCompleted'] ?? map['is_completed'] ?? false;
+    final String resolvedStatus;
+    if (rawStatus != null && ['Process', 'Hold', 'Complete'].contains(rawStatus)) {
+      resolvedStatus = rawStatus;
+    } else {
+      resolvedStatus = legacyCompleted ? 'Complete' : 'Process';
+    }
+    return RoadmapStep(
+      id: map['id']?.toString() ?? '',
+      title: map['title'] ?? '',
+      description: map['description'] ?? '',
+      status: resolvedStatus,
+      priority: map['priority']?.toString() ?? 'Medium',
+      startTime: map['startTime'] != null ? DateTime.tryParse(map['startTime'].toString())?.toLocal() : null,
+      endTime: map['endTime'] != null ? DateTime.tryParse(map['endTime'].toString())?.toLocal() : null,
+      isLocked: map['isLocked'] ?? false,
+    );
   }
 }
 
@@ -166,6 +275,9 @@ class SystemTask {
       'endDate': endDate?.toIso8601String(),
       'location': location,
       'comments': comments.map((c) => c.toMap()).toList(),
+      'sub_tasks': subTasks.map((s) => s.toMap()).toList(),
+      'documents': documents.map((d) => d.toMap()).toList(),
+      'roadmap_steps': roadmapSteps.map((r) => r.toMap()).toList(),
       'planId': planId,
       'projectId': projectId,
       'isArchived': isArchived,
@@ -184,7 +296,7 @@ class SystemTask {
       status: _parseStatus(map['status']),
       priority: _parsePriority(map['priority']),
       allocatedCost: (map['allocatedCost'] ?? map['allocated_cost'] ?? 0).toDouble(),
-      author: map['author'] ?? 'Admin',
+      author: map['author'] ?? (map['creator'] != null && map['creator']['name'] != null ? map['creator']['name'].toString() : 'Admin'),
       assignee: map['assignee'] ?? 'Unassigned',
       dueDate: _parseDateTime(map['dueDate'] ?? map['due_date']),
       startDate: _parseDateTime(map['startDate'] ?? map['start_date']),
@@ -193,6 +305,19 @@ class SystemTask {
       comments: map['comments'] != null
           ? List<TaskComment>.from(map['comments'].map((x) => TaskComment.fromMap(x)))
           : [],
+      subTasks: map['subTasks'] != null
+          ? List<SubTask>.from(map['subTasks'].map((x) => SubTask.fromMap(x)))
+          : map['sub_tasks'] != null
+              ? List<SubTask>.from(map['sub_tasks'].map((x) => SubTask.fromMap(x)))
+              : [],
+      documents: map['documents'] != null
+          ? List<TaskDocument>.from(map['documents'].map((x) => TaskDocument.fromMap(x)))
+          : [],
+      roadmapSteps: map['roadmapSteps'] != null
+          ? List<RoadmapStep>.from(map['roadmapSteps'].map((x) => RoadmapStep.fromMap(x)))
+          : map['roadmap_steps'] != null
+              ? List<RoadmapStep>.from(map['roadmap_steps'].map((x) => RoadmapStep.fromMap(x)))
+              : [],
       planId: map['planId']?.toString() ?? map['plan_id']?.toString(),
       projectId: map['projectId']?.toString() ?? map['project_id']?.toString(),
       isArchived: _parseBool(map['isArchived'] ?? map['is_archived'] ?? false),
@@ -230,7 +355,11 @@ class SystemTask {
     if (val is String) {
       final idx = int.tryParse(val);
       if (idx != null) return TaskStatus.values[idx % TaskStatus.values.length];
-      return TaskStatus.values.firstWhere((e) => e.name == val, orElse: () => TaskStatus.todo);
+      final statusStr = val.toLowerCase().replaceAll('_', '');
+      return TaskStatus.values.firstWhere(
+        (e) => e.name.toLowerCase().replaceAll('_', '') == statusStr,
+        orElse: () => TaskStatus.todo,
+      );
     }
     return TaskStatus.todo;
   }

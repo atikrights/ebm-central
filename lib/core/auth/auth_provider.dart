@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../network/api_service.dart';
 import '../../features/chat/data/websocket_service.dart';
 import '../../features/chat/data/local_database_service.dart';
+import '../providers/preferences_provider.dart';
 
 // ─────────────────────────────────────────────
 // Auth State Model
@@ -268,6 +269,11 @@ class AuthNotifier extends Notifier<AuthState> {
       }
       if (response['chat_about'] != null) {
         await prefs.setString('chat_about', response['chat_about']);
+      }
+
+      // Sync preferences from server
+      if (response['preferences'] != null) {
+        ref.read(preferencesProvider.notifier).syncFromServer(response['preferences']);
       }
 
       state = state.copyWith(

@@ -27,24 +27,30 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Timer? _refreshTimer;
+  late final WebSocketService _webSocketService;
 
   @override
   void initState() {
     super.initState();
-    // Realtime metrics invalidation on WebSocket data updates
-    ref.read(webSocketServiceProvider).addListener(_onWsEvent);
+    // Store WebSocketService reference in initState to prevent calling ref.read inside dispose()
+    _webSocketService = ref.read(webSocketServiceProvider);
+    _webSocketService.addListener(_onWsEvent);
 
     // Fallback periodic refresh (every 15 seconds)
     _refreshTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       if (mounted) {
-        ref.invalidate(dashboardMetricsProvider);
+        try {
+          ref.invalidate(dashboardMetricsProvider);
+        } catch (_) {
+          // Handle element disposal safely
+        }
       }
     });
   }
 
   @override
   void dispose() {
-    ref.read(webSocketServiceProvider).removeListener(_onWsEvent);
+    _webSocketService.removeListener(_onWsEvent);
     _refreshTimer?.cancel();
     super.dispose();
   }
@@ -60,7 +66,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         name.contains('plan_updated') ||
         name.contains('_approved'); // catches project_approved, task_approved, etc.
     if (shouldRefresh && mounted) {
-      ref.invalidate(dashboardMetricsProvider);
+      try {
+        ref.invalidate(dashboardMetricsProvider);
+      } catch (_) {
+        // Handle element disposal safely
+      }
     }
   }
 
